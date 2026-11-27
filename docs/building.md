@@ -124,10 +124,9 @@ the capture script after each run. If operating-system or security controls bloc
 that exact cleanup, the path is preserved as a protected remainder for later
 classification; the workflow does not bypass those controls.
 
-Evidence is temporary by default. Retain a small representative set only when an
-owner requests it, a subjective product decision remains open, a major campaign
-boundary requires it, or the raw capture is still the smallest useful diagnostic.
-Do not create routine Desktop evidence bundles. After a result is classified and
+Evidence is temporary by default. Retain a representative set when needed for
+maintainer review, visual assessment, integration validation, or diagnosis.
+Use the project-owned evidence directory for retained captures. After a result is classified and
 protected by source, tests, and regressions, retire disposable output with the
 lifecycle manager using one exact marked candidate path. Unmarked paths remain
 preserved until their ownership and retention purpose are established.

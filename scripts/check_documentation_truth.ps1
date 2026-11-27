@@ -25,6 +25,14 @@ function Get-RepositoryText {
 $readme = Get-RepositoryText "README.md"
 $capabilities = Get-RepositoryText "docs/current-capabilities.md"
 $roadmap = Get-RepositoryText "docs/roadmap.md"
+$editorUi = Get-RepositoryText "docs/ui.md"
+$completionMatrix = Get-RepositoryText "docs/engine-completion-matrix.md"
+$codingStandard = Get-RepositoryText "docs/coding-standard.md"
+$actionApi = Get-RepositoryText "docs/action-api.md"
+$modelLoading = Get-RepositoryText "docs/model-loading.md"
+$sceneArchitecture = Get-RepositoryText "docs/scene-authoring-architecture.md"
+$platformSupport = Get-RepositoryText "docs/platform-support.md"
+$sceneDocumentHeader = Get-RepositoryText "engine/include/henka/scene_document.h"
 $authoringMesh = Get-RepositoryText "docs/authoring-mesh.md"
 $componentIdentities = Get-RepositoryText "docs/authoring-component-identities.md"
 $authoringMeshSource = Get-RepositoryText "engine/src/mesh/authoring_mesh.c"
@@ -115,6 +123,104 @@ foreach ($record in $statusRecords) {
     }
 }
 
+$prefabStatusRecord = @($statusRecords | Where-Object { $_.Area -eq "Prefabs" })
+$prefabRoadmapSection = [regex]::Match(
+    $roadmap,
+    '(?ms)^##\s+Prefabs\s*/\s*Reusable Scene Objects\s*\r?\n(.*?)(?=^##\s|\z)')
+if ($prefabStatusRecord.Count -ne 1 -or -not $prefabRoadmapSection.Success) {
+    Add-Finding "docs/roadmap.md: Prefab status section could not be matched to the capability status authority"
+} else {
+    $prefabRoadmapStatus = [regex]::Match(
+        $prefabRoadmapSection.Groups[1].Value,
+        '(?im)^>\s*\*\*Status:\*\*\s*([^\r\n]+)')
+    $expectedPrefabStatus = [string]$prefabStatusRecord[0].Status
+    if (-not $prefabRoadmapStatus.Success -or
+        $prefabRoadmapStatus.Groups[1].Value.Trim() -notmatch (
+            '^' + [regex]::Escape($expectedPrefabStatus) + '(?:\b|\s|$)')) {
+        Add-Finding "docs/roadmap.md: Prefab status disagrees with docs/capability-statuses.tsv ('$expectedPrefabStatus')"
+    }
+}
+
+$namedLayoutSlots = [regex]::Match(
+    $editorUi,
+    '(?ms)^###\s+Named layout slots\s*\r?\n(.*?)(?=^#{1,3}\s|\z)')
+if ($editorUi -notmatch '(?i)Editor UI Scale is a separate global editor preference' -or
+    $editorUi -notmatch '(?is)ui\.workspace\.custom_layout\.ui_scale.{0,180}one-time compatibility migration' -or
+    $editorUi -notmatch '(?i)ui\.editor\.scale_percent' -or
+    -not $namedLayoutSlots.Success) {
+    Add-Finding "docs/ui.md: global Editor UI Scale ownership and legacy migration must be documented separately from workspace layouts"
+} elseif ($namedLayoutSlots.Groups[1].Value -match '(?i)(?:named\s+)?layout\s+slots?.{0,100}(?:store|persist|own|override).{0,60}(?:Editor\s+)?UI\s+Scale|(?:store|persist|own|override).{0,60}(?:Editor\s+)?UI\s+Scale.{0,100}(?:named\s+)?layout\s+slots?') {
+    Add-Finding "docs/ui.md: named workspace layout slots must not store or override global Editor UI Scale"
+}
+
+$editorIconPolicy = [regex]::Match(
+    $codingStandard,
+    '(?ms)^##\s+Production editor icons\s*\r?\n(.*?)(?=^##\s|\z)')
+if (-not $editorIconPolicy.Success -or
+    $editorIconPolicy.Groups[1].Value -notmatch '(?is)Henka.*modeling.*tools.{0,300}save/reload.{0,300}packaging.{0,300}without color alone') {
+    Add-Finding "docs/coding-standard.md: production editor-icon authorship and validation rules are missing"
+}
+if ($completionMatrix -match '(?im)^##\s+Modeling-readiness gate for editor icons\s*$') {
+    Add-Finding "docs/engine-completion-matrix.md: detailed editor-icon implementation policy belongs in contributor standards, not the capability inventory"
+}
+if ($readme -match '(?i)Scene/project serialization,\s*hierarchy authoring') {
+    Add-Finding "README.md: hierarchy authoring exists within the bounded parent/unparent/reparent workflow; describe the broader gap precisely"
+}
+if ($roadmap -match '(?i)explicit serialized per-instance override metadata is not yet available') {
+    Add-Finding "docs/roadmap.md: HSCN v17 persists supported non-root prefab local-transform override metadata"
+}
+if ($editorUi -match '(?im)^-\s*(?:Full hierarchy editing is planned separately|Full asset browsing is planned separately|Complete numeric property editing is planned separately|Scene Hierarchy / Parenting;|Prefabs;)') {
+    Add-Finding "docs/ui.md: describe current bounded hierarchy, Asset Browser, World Transform Inspector, and Prefab workflows before broader planned work"
+}
+if ($actionApi -match '(?is)The Sandbox\s+outliner,\s*hierarchy history,\s*and broader editor authoring surface remain\s+separate work') {
+    Add-Finding "docs/action-api.md: bounded Scene Objects hierarchy projection and Game Authoring history are available"
+}
+if ($modelLoading -match '(?im)^\s*(?:-\s*editor hierarchy authoring\s*;?|Editor hierarchy authoring remains future work\.?)\s*$') {
+    Add-Finding "docs/model-loading.md: distinguish imported model-node hierarchy support from existing scene-object parenting controls"
+}
+
+$workspaceMatrixRow = [regex]::Match(
+    $completionMatrix,
+    '(?m)^\|\s*Editor workspace and UI\s*\|[^\r\n]*$')
+if (-not $workspaceMatrixRow.Success -or
+    $workspaceMatrixRow.Value -notmatch '(?i)Atkinson Hyperlegible Regular is the bundled product default') {
+    Add-Finding "docs/engine-completion-matrix.md: bundled Atkinson Hyperlegible Regular must be described as the product default"
+}
+
+if ($sandboxQa -match '(?i)UI overlay is still intentionally small and is not an editor') {
+    Add-Finding "docs/qa/sandbox3d-manual-checklist.md: obsolete claim that the Sandbox UI is not an editor"
+}
+if ($platformSupport -match '(?i)Windows CI currently uses a deterministic packaged startup smoke test with no mouse, keyboard, or desktop-focus dependency') {
+    Add-Finding "docs/platform-support.md: hosted Windows validation is incorrectly described as startup-only"
+}
+foreach ($workflowTerm in @("New Scene", "Save As", "Open Scene", "Reload", "Save / Discard / Cancel")) {
+    if ($sandboxHelp -notmatch [regex]::Escape($workflowTerm)) {
+        Add-Finding "docs/help/sandbox3d.md: current packaged Game Authoring workflow is missing '$workflowTerm'"
+    }
+}
+
+$sceneDocumentVersionMatch = [regex]::Match(
+    $sceneDocumentHeader,
+    '(?m)^#define\s+HENKA_SCENE_DOCUMENT_FORMAT_VERSION\s+UINT32_C\((\d+)\)')
+if (-not $sceneDocumentVersionMatch.Success) {
+    Add-Finding "engine/include/henka/scene_document.h: current HSCN writer version could not be determined"
+} else {
+    $currentSceneDocumentVersion = [int]$sceneDocumentVersionMatch.Groups[1].Value
+    $currentSceneDocumentClaim = "HSCN v$currentSceneDocumentVersion"
+    foreach ($document in @(
+        [pscustomobject]@{ Path = "docs/current-capabilities.md"; Text = $capabilities },
+        [pscustomobject]@{ Path = "docs/scene-authoring-architecture.md"; Text = $sceneArchitecture }
+    )) {
+        if ($document.Text -notmatch [regex]::Escape($currentSceneDocumentClaim)) {
+            Add-Finding "$($document.Path): current HSCN format '$currentSceneDocumentClaim' is not documented"
+        }
+    }
+    $readerRangeClaim = "reader explicitly accepts HSCN v1 through v$currentSceneDocumentVersion"
+    if ($sceneArchitecture -notmatch [regex]::Escape($readerRangeClaim)) {
+        Add-Finding "docs/scene-authoring-architecture.md: accepted HSCN reader range must match the versioned implementation"
+    }
+}
+
 $capabilityMatrixMatch = [regex]::Match($readme, '(?ms)^##\s+Capability matrix\s*\r?\n(.*?)(?=^###\s+Status meanings|^##\s|\z)')
 if (-not $capabilityMatrixMatch.Success) {
     Add-Finding "README.md: capability matrix section is missing"
@@ -122,6 +228,29 @@ if (-not $capabilityMatrixMatch.Success) {
 } else {
     $capabilityMatrix = $capabilityMatrixMatch.Groups[1].Value
 }
+
+$gameAuthoringRow = [regex]::Match(
+    $capabilityMatrix,
+    '(?m)^\|\s*Game authoring\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|')
+if (-not $gameAuthoringRow.Success) {
+    Add-Finding "README.md: bounded Game Authoring workflow row is missing"
+} else {
+    $gameAuthoringSummary = $gameAuthoringRow.Groups[2].Value
+    foreach ($workflowTerm in @(
+        "New Scene",
+        "Save/Save As",
+        "Open",
+        "Reload",
+        "Save/Discard/Cancel",
+        "window close",
+        "Play"
+    )) {
+        if ($gameAuthoringSummary -notmatch [regex]::Escape($workflowTerm)) {
+            Add-Finding "README.md: Game Authoring summary is missing supported workflow '$workflowTerm'"
+        }
+    }
+}
+
 $matrixMatches = [regex]::Matches($capabilityMatrix, '(?m)^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|')
 foreach ($matrixMatch in $matrixMatches) {
     $area = $matrixMatch.Groups[1].Value.Trim()
@@ -153,13 +282,17 @@ foreach ($stalePattern in @(
     "(?i)modeling follows the production-quality 2\.5D track",
     "(?i)then integrated modeling",
     "(?i)vertex/edge deletion.{0,100}remain in progress",
-    "(?i)full host API coverage.{0,100}`for` loops.{0,100}future"
+    "(?i)full host API coverage.{0,100}`for` loops.{0,100}future",
+    "(?is)full\s+Game/Play\s+authoring.{0,160}not\s+yet\s+available",
+    "(?i)Editor hierarchy authoring remains future work",
+    "(?i)Complete scene/project authoring remains future work"
 )) {
     foreach ($document in @(
         [pscustomobject]@{ Path = "README.md"; Text = $readme },
         [pscustomobject]@{ Path = "docs/current-capabilities.md"; Text = $capabilities },
         [pscustomobject]@{ Path = "docs/roadmap.md"; Text = $roadmap },
-        [pscustomobject]@{ Path = "docs/scripting-foundation.md"; Text = $scripting }
+        [pscustomobject]@{ Path = "docs/scripting-foundation.md"; Text = $scripting },
+        [pscustomobject]@{ Path = "docs/help/sandbox3d.md"; Text = $sandboxHelp }
     )) {
         if ($document.Text -match $stalePattern) {
             Add-Finding "$($document.Path): stale capability wording matches '$stalePattern'"

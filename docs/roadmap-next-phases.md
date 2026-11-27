@@ -1,126 +1,116 @@
 # Henka Engine Dimensional Expansion and Post-3D Roadmap
 
-This document complements [roadmap.md](roadmap.md) by recording the requirements for dimensional expansion and longer-range product work. It does not create a second active campaign order, define dates, or change current capability status.
+This roadmap describes planned improvements to Henka's editor, distribution, dimensional support, and longer-range engine capabilities. Henka is a general-purpose MIT-licensed game engine. The current priority is a complete 3D game-development workflow.
 
-Henka remains a general-purpose MIT-licensed game engine. The current general 3D completion sequence already includes editor/workspace maturity, packaging/distribution/external-project work, animation/character production, and a final integrated 3D audit. Those areas therefore are not separate post-3D campaigns here.
-
-Later phases must build on the same canonical scene, identity, persistence, asset, input, scripting, Audio, packaging, and external-project boundaries while keeping one shared engine architecture across dimensions and device classes.
+For the current development direction, see [Roadmap](roadmap.md). For implemented capabilities and limitations, see [Current Capabilities](current-capabilities.md). This document describes plans, not a release schedule or claims of current support.
 
 ## Planned sequence
 
-The owner-approved high-level dimensional order is:
+1. Complete the general 3D engine, including the integrated editor, packaging, external-project workflows, animation, and whole-system validation.
+2. Introduce first-class 2D support on the shared engine foundations.
+3. Introduce first-class 2.5D support by combining the mature 2D and 3D systems.
+4. Validate integrated 3D, 2D, and 2.5D workflows.
 
-1. Complete the current general 3D engine boundary, including the editor/product-experience, packaging/distribution/external-project, animation/character-production, and Final Overall 3D Audit steps defined by [roadmap.md](roadmap.md).
-2. Complete the Full First-Class 2D Engine campaign on the mature shared engine foundations.
-3. Complete the Full First-Class 2.5D Engine campaign as deliberate composition of the mature 2D and 3D systems.
-4. Run the Final Whole-Engine Integration / Regression / Documentation / Release-Readiness / Completion Audit across 3D, 2D, and 2.5D.
-5. Stop for owner direction before any new major expansion, release, or tag.
-
-Versioned public release hardening, a later GameDev-oriented documentation reframe, advanced-engine wishlist work, XR, and device expansion remain owner-directed future work. They do not insert themselves between the queued dimensional campaigns unless the owner explicitly changes the order.
-
-The ordering is dependency-driven. Independent preparation may overlap only when it does not create competing sources of truth, unstable public contracts, duplicate work, or a hidden second campaign sequence.
+Advanced renderer features, XR, additional devices, and further platform expansion are longer-term possibilities. No dates or release commitments are announced here.
 
 ## Editor and product experience
 
-Editor/product-experience maturity is already part of the current 3D completion sequence before the Final Overall 3D Audit. The requirements below define that boundary; they do not establish a duplicate post-3D editor campaign.
+The native Sandbox already provides an integrated docked and detached editor
+workspace with Scene View, utility panels, Object Details, and bounded authoring
+tools. The 3D roadmap continues to make these workflows discoverable, reliable,
+and complete for creating, editing, testing, and packaging game projects.
 
 ### Product identity
 
-The normal developer-facing application should present a consistent Henka Engine / Henka Editor identity and a deliberate end-user product experience, distinct from internal samples, test harnesses, and CMake tooling. The product experience should include:
-
-- consistent application naming, iconography, version/build identity, About information, and license presentation;
-- intentional startup, project-open, loading, failure, and shutdown presentation;
-- coherent terminology across menus, inspectors, dialogs, help, diagnostics, and packaging;
-- restrained use of Henka branding so the workspace remains suitable for long work sessions.
-
-The Sandbox may remain an internal reference and QA target, but game developers should interact with a deliberate product surface.
+Further editor identity improvements include consistent application naming,
+icons, build and version information, About and licensing information, and
+clear startup, project loading, error, and shutdown presentation. Consistent
+terminology across menus, inspectors, dialogs, help, diagnostics, and packages
+will support familiar navigation.
 
 ### Design system
 
-The editor should use one documented visual and interaction grammar covering:
+The editor already ships bundled Atkinson Hyperlegible typography and a
+persisted global Editor UI Scale. Ongoing design-system work continues to
+improve consistency and interaction clarity, including:
 
-- typography hierarchy and readable minimum sizes;
-- spacing, control heights, panel rhythm, and gutters;
-- buttons, toggles, checkboxes, segmented controls, dropdowns, numeric/vector inputs, sliders, tabs, trees, toolbars, breadcrumbs, search fields, context menus, tooltips, dialogs, toasts, progress indicators, and error banners;
-- normal, hover, pressed, selected, focused, disabled, warning, destructive, invalid, and modified states;
-- a high-quality dark theme first, followed by additional appearance modes only when they can meet the same standard.
-
-The UI should not imitate another engine closely enough to become derivative. Familiar desktop/game-development conventions should be used where they improve discoverability.
+- continued text readability, responsive controls, consistent spacing, and
+  panel layouts;
+- buttons, toggles, checkboxes, segmented controls, dropdowns, numeric and vector inputs, sliders, tabs, trees, toolbars, breadcrumbs, search, context menus, tooltips, dialogs, notifications, progress indicators, and error messages;
+- clear hover, pressed, selected, focused, disabled, warning, destructive, invalid, and modified states;
+- a refined dark appearance, with additional appearance options planned as the editor matures.
 
 ### Information architecture and discoverability
 
-The workspace should provide coherent places for scene hierarchy, Scene View, Object Details/Inspector, project/content browsing, modeling, materials, terrain/world tools, animation, Audio, scripting, diagnostics/output, build/package, and profiling.
-
-Context-sensitive tools should become relevant when the active object or component changes without hiding essential functionality. A searchable command/action surface should eventually provide fast access to commands, settings, assets, objects, and help where appropriate.
+Further workspace improvements will better connect the existing Scene View,
+bounded hierarchy and Object Details workflows with project/content browsing,
+modeling, materials, terrain, animation, audio, scripting, diagnostics,
+packaging, and profiling. Context-sensitive controls and searchable commands
+will make relevant tools easier to find.
 
 ### Project and content experience
 
-The mature product should include a practical project/start experience and content browser with:
+Planned project and asset management features include:
 
-- recent projects, create/open project, templates, documentation/help entry points, and engine-version visibility;
-- stable asset identity underneath path/name changes;
-- folders, search, filtering, thumbnails, import, rename, move, duplicate, delete, drag/drop, dependency/reference inspection, and missing-dependency diagnostics;
-- clear project settings separated from per-user editor preferences.
+- recent projects, project creation and opening, templates, help, and engine-version information;
+- stable asset identity across supported path and name changes;
+- folders, search, filters, thumbnails, import, rename, move, duplicate, delete, drag-and-drop, dependency inspection, and missing-dependency diagnostics;
+- separate project settings and personal editor preferences.
 
 ### Error, progress, and dirty-state UX
 
-Human-readable diagnostics should explain what failed, why it matters, and the useful recovery action while retaining technical details for debugging. Long-running operations should expose progress and safe cancellation where supported instead of freezing without explanation.
-
-Modified state should be derived from authoritative data and clearly surfaced for scenes, assets, materials, scripts, models, and project settings. Save All and close/project-switch behavior should preserve transaction and failure guarantees.
-
-Undo/redo should use meaningful action labels such as `Undo Bevel Edges` or `Undo Assign Material` when the underlying history can provide them.
+New/Open/Reload and editor-close transitions already protect dirty Scene
+Document and Terrain state with Save, Discard, or Cancel. Further work extends
+modified-state tracking to more authored resources and adds broader Save All
+and project-switch behavior, with useful recovery messages and safe operation
+progress where supported. Descriptive undo/redo labels will help users
+understand which action is being reversed or repeated.
 
 ### Viewport and authoring polish
 
-Viewport maturity includes clear selection/hover feedback, unobtrusive grids and overlays, polished gizmos, snapping indicators, camera previews, topology displays, pivots, safe-frame/debug views, and presentation that does not let diagnostics obscure the edited subject.
+Further viewport work refines existing selection feedback, grids, transform
+gizmos, snapping, and topology displays while adding capabilities such as
+camera previews, expanded pivot controls, and useful debug views.
 
-Modeling UX should make component mode, selection state, preview, numeric input, Apply/Cancel, snapping, proportional/soft editing, topology warnings, material preview, and relevant close-up inspection obvious without requiring knowledge of the C API.
+Henka already provides discoverable component selection and a broad set of
+preview/Apply/Cancel topology operations. Further modeling work improves
+numeric workflows, snapping, soft editing, topology diagnostics, and material
+preview through the graphical editor.
 
 ### Accessibility and layout acceptance
 
-The editor should deliberately validate keyboard navigation, focus indicators, UI scaling, readable text, contrast, color-independent status cues, high-DPI behavior, and reduced-motion options where relevant.
-
-Executable layout/visual validation should exercise representative 1280x720, 1920x1080, 2560x1440, ultrawide, and high-DPI cases and detect clipping, overlap, inaccessible controls, off-screen dialogs, zero-width regions, and broken layout restoration.
+The editor has a bundled readable font and global UI scaling. Further
+accessibility and layout work includes keyboard navigation, visible focus,
+contrast, color-independent status cues, operating-system high-DPI behavior,
+and reduced-motion options where relevant. Validation continues across
+representative resolutions, display scales, clipping, overlap, control
+accessibility, and layout restoration. These plans do not claim complete
+accessibility conformance.
 
 ## Packaging, distribution, and release engineering
 
-Packaging/distribution/external-project maturity is already part of the current 3D completion sequence. The requirements below belong to that campaign and the Final Overall 3D Audit. They do not authorize a release or tag, which remains owner-controlled.
+Henka's distribution plans include an editor and runtime that can support normal game-development workflows without requiring a source build for every operation.
 
 ### Initial Windows distribution direction
 
-The preferred initial mature distribution remains a versioned portable Windows package because it is straightforward to reproduce and validate. An installer and updater may follow after the binary layout and migration contracts stabilize.
-
-A release-oriented package should include the editor/runtime pieces required by the supported GameDev workflow, public SDK/header material where applicable, templates, required runtime assets/dependencies, packaging tools, offline/help content, exact build identity, and licensing notices.
+The initial planned distribution is a versioned portable Windows package. An installer and updater may follow as binary layout and migration support mature. Packages are expected to contain the supported editor/runtime components, public SDK headers where applicable, templates, required dependencies and assets, packaging tools, help, build identity, and licensing notices.
 
 ### Distribution guarantees
 
-The mature distribution boundary should provide:
+Planned distribution capabilities include:
 
-- explicit engine version and build identity;
-- exact source provenance for shipped binaries and supporting assets;
-- checksums and release verification;
-- reproducible package assembly from one exact candidate;
-- project/schema compatibility information;
-- migration policy for versioned project data;
-- clean separation of user settings, project data, caches, generated outputs, and installed engine files;
-- crash/recovery diagnostics appropriate to a distributed application;
-- validated external-project templates against the released binary/SDK boundary;
-- release notes that distinguish new features, compatibility changes, migration requirements, fixes, and known limitations.
+- engine version, build identity, source provenance, checksums, and reproducible package assembly;
+- project/schema compatibility and migration information;
+- separation of settings, projects, caches, generated output, and installed engine files;
+- crash and recovery diagnostics;
+- external-project templates tested against the released SDK/runtime;
+- release notes with features, fixes, compatibility changes, migration requirements, and known limitations.
 
-Normal game-development workflows should not require shell commands once the product path is ready. CMake, PowerShell, and source builds remain supported engineering and automation interfaces; the normal product workflow is graphical.
+Source builds, CMake, and PowerShell remain supported engineering interfaces. The longer-term game-development workflow is graphical.
 
 ### GameDev-oriented documentation transition
 
-When the binary product path is genuinely ready, the README and primary docs may be reorganized around a game developer's questions:
-
-- What is Henka?
-- What can I build with it?
-- Where do I obtain it?
-- How do I create/open a project?
-- How do I author, Play, and package a game?
-- Where are the editor, scripting, asset, and packaging guides?
-
-Implementation language, source-building, architecture, and contribution details remain important but can move below the normal product workflow when that transition is supported by the actual product. This documentation reframe is not a substitute for the current capability/status documentation and is not an automatic release action.
+As the editor and binary distribution mature, user documentation will cover obtaining Henka, creating and opening projects, authoring and testing scenes, packaging games, and using the editor, scripting, and asset tools. Source-build, architecture, and contributor guides remain available for engine developers.
 
 ## First-class 2D
 
@@ -263,9 +253,7 @@ Permanent executable fixtures should include at least a 3D side-scrolling level,
 
 ## Advanced expansion after dimensional completion
 
-Advanced expansion begins only after the Final Whole-Engine Audit closes the integrated 3D/2D/2.5D boundary and the owner explicitly chooses the next direction.
-
-At that point Henka should reconcile the maintained long-range wishlist against the mature engine. Each requested item should be classified as already absorbed, partially absorbed, still missing, superseded by a better architecture, or still desired advanced work before implementation begins.
+Further expansion is a longer-term possibility after integrated 3D, 2D, and 2.5D support. The following areas describe potential directions rather than committed features or release dates.
 
 Possible later areas include:
 
@@ -281,7 +269,7 @@ The mature engine should absorb these as coherent subsystem improvements with st
 
 ## XR and immersive-device direction
 
-XR is owner-directed future work after the integrated dimensional completion boundary. It should be treated as a presentation/input capability over native 2D, 2.5D, and 3D worlds, not as another dimensional engine.
+XR is a potential future presentation and input capability for native 2D, 2.5D, and 3D projects, using the shared engine architecture.
 
 Standards, headset runtimes, and hardware capabilities evolve quickly. Henka should preserve backend isolation and reassess the best standards-oriented implementation path when this phase becomes active, keeping the design open to the best available standards and devices at that time.
 

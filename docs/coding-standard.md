@@ -41,6 +41,21 @@
 - Explain what is visible, what controls are available, what the user can try, and what is currently limited.
 - Keep internal implementation or workflow language out of user-facing text.
 
+## Production editor icons
+
+Treat production editor icons as Henka-authored content where the engine's
+modeling tools can produce a production-ready result. For each new or
+replacement icon, first attempt to author it with Henka's own tools and retain
+the editable source asset alongside the normal saved/imported asset pipeline.
+Validate save/reload, rendering, packaging, and legibility at the actual UI
+sizes and supported scales. Use shape and state cues that remain understandable
+without color alone.
+
+If Henka cannot reasonably create a required production-ready icon, record the
+specific modeling/content-authoring limitation. A temporary externally authored
+stand-in must be labeled as such and does not establish native authoring
+readiness.
+
 ## Scope discipline
 
 - Build the next useful layer and document later systems as future work.

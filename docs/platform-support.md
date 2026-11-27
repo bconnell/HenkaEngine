@@ -53,6 +53,16 @@ Supported status requires exercised and documented coverage for the applicable a
 11. dependency acquisition or documented offline/cached behavior;
 12. platform-specific failure and recovery paths.
 
-Windows CI currently uses a deterministic packaged startup smoke test with no mouse, keyboard, or desktop-focus dependency. The full packaged UI interaction check remains available for local desktop validation.
+The hosted Windows workflow runs Debug tests and builds a packaged Sandbox,
+checks its package contract, exercises packaged startup/Game Authoring and a
+visible native-modeling path, checks bounded smoke progress, runs a bounded
+packaged soak, validates the external game and server templates, and checks
+generated-output lifecycle behavior. Separate Windows jobs run Release tests
+and the first-party sanitizer runtime gate. The workflow prepares the pinned
+software OpenGL fallback for its graphical jobs.
+
+These are bounded automated functional checks on Windows 2022. They do not
+replace human visual review, broad editor-usability evaluation, non-100% OS
+display-scale acceptance, or validation on Linux, macOS, and mobile platforms.
 
 Validated platform support requires an exercised production path.

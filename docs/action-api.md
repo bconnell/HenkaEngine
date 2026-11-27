@@ -114,9 +114,10 @@ This keeps viewport helpers outside ordinary user-object authority.
 
 Hierarchy actions reject helper or stale parent handles, transform-locked
 children, invalid parenting modes, and cycle-producing relationships. A
-rejected relationship leaves the scene hierarchy unchanged. The Sandbox
-outliner, hierarchy history, and broader editor authoring surface remain
-separate work.
+rejected relationship leaves the scene hierarchy unchanged. The Scene Objects
+and Object Details panels project supported parent relationships, and Game
+Authoring history owns bounded reparent/unparent transactions. Broader subtree
+organization and history across subsystems remain incomplete.
 
 Subtree duplication accepts a live user-object handle, validates and captures
 the bounded source snapshot before mutation, and rolls back any partial

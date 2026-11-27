@@ -286,7 +286,9 @@ Current interaction behavior includes:
 - selected objects can show a transform gizmo;
 - viewport-relative rays drive manipulation so docked panel clicks do not affect scene transforms.
 
-The Sandbox remains an engine sample and QA target. Production editor maturity is still in progress.
+The Sandbox is Henka's integrated editor and a packaged end-to-end validation
+target. Its current workflows are bounded, and production editor maturity is
+still in progress.
 
 ## Current boundaries
 
@@ -303,9 +305,14 @@ The Sandbox remains an engine sample and QA target. Production editor maturity i
 - Scene data remains public enough for engine consumers while renderer internals stay private.
 - Real games are intended to live in separate repositories and consume Henka through its public boundaries.
 
+The current Scene Document, project-open, scene materialization, and transition
+boundaries are described in [Scene Authoring Architecture](scene-authoring-architecture.md).
+The supported scope and remaining product gaps are summarized in
+[Current Capabilities](current-capabilities.md).
+
 ## Near-term direction
 
-Planned architecture work follows the current 3D completion sequence: renderer hardening, integrated modeling/content authoring, assets/materials, physics, durable Game Authoring and Scene Document workflows, prefabs, camera/viewport maturity, terrain/world, lighting/environment, scripting, Character Controller, Audio, networking/server behavior, editor workspace, packaging/external projects, animation/character production, and the final integrated 3D audit.
+Architecture work follows the current 3D completion sequence: renderer hardening, integrated modeling/content authoring, assets/materials, physics, continued maturity of the bounded Game Authoring and Scene Document workflows, prefabs, camera/viewport maturity, terrain/world, lighting/environment, scripting, Character Controller, Audio, networking/server behavior, editor workspace, packaging/external projects, animation/character production, and the final integrated 3D audit.
 
 Supporting architecture work includes:
 

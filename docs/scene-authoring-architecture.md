@@ -271,16 +271,16 @@ descriptors, reflection-probe volume descriptors, prefab-instance provenance,
 and explicit non-root prefab local-transform override metadata. It validates
 references, cycles, camera values, controller values, renderer values,
 environment values, scene render settings, and render-resource values during
-load. v1-v9 documents
-migrate in memory without being rewritten, v7 data defaults the new controller
-component to disabled, v8 data retains its controller payload while using
-defaults for the v9 renderer fields, v10 data retains its environment while
-using default direct-lighting, fog, and local-light/probe settings, and v11
-data retains direct-lighting and fog settings while using default local-light/
-probe settings. Legacy documents without an authored camera or environment
-remain valid and expose no authored value for the missing field. Borrowed HDR
-texture resources and renderer-owned captured GPU resources remain runtime-
-owned and are not serialized as document state.
+load. The reader explicitly accepts HSCN v1 through v17 and applies defaults
+for fields absent from older versions without rewriting the source file.
+Scene names are stored by v17; earlier files use the `Untitled Scene` default.
+Version-gated migrations include the v7 controller default, v8 controller
+payload with v9 renderer defaults, v10 environment with default direct
+lighting/fog/local-light/probe settings, and v11 direct-lighting/fog payload
+with default local-light/probe settings. Legacy documents without an authored
+camera or environment remain valid and expose no authored value for the
+missing field. Borrowed HDR texture resources and renderer-owned captured GPU
+resources remain runtime-owned and are not serialized as document state.
 The Sandbox Object Details > Hierarchy group provides an explicit parent
 picker and Unparent action for registered scene objects. It presents stable
 runtime entity identities beside display names and routes Keep Local and Keep
