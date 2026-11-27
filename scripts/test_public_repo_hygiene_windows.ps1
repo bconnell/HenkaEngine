@@ -80,7 +80,6 @@ try {
         -FilePath "powershell.exe" `
         -Arguments @(
             "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
             "-File", $hygieneScript) `
         -WorkingDirectory $RepositoryRoot `
         -Label "Run public repository hygiene regression set" `

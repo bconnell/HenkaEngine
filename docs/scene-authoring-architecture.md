@@ -124,13 +124,13 @@ fallback above remains specific to in-session `load`.
 
 ## `.hscene` representation
 
-Scene Document V1 uses a deterministic little-endian binary format with the `HSCN` magic.
+The original HSCN v1 format used a deterministic little-endian binary format.
 
 The format matches the repository's existing bounded persistence model: explicit fields, versioning, checksums, bounded records, candidate validation, and atomic replacement.
 
-### V1 record contract
+### Historical V1 record contract
 
-The format provides:
+The V1 record contract provided:
 
 - a documented header containing magic, format version, header size, payload size, object count, and checksum;
 - explicit field encoding;
@@ -158,9 +158,12 @@ The public document API provides bounded inspection data for tooling, including:
 - source kinds;
 - authored component presence.
 
-### Version migration
+### Historical V1 migration note
 
-V1 code rejects newer unsupported format versions. Future loaders may validate an older format, migrate it into the current in-memory schema, and publish the migrated candidate only after successful validation.
+The V1 implementation rejected newer unsupported format versions. Its note
+about possible future migration is historical; current writer and reader
+versions and compatibility behavior are described in the current-format
+section below.
 
 Semantic round-trip tests are part of the format's release requirements.
 
