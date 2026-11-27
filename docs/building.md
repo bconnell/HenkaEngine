@@ -6,7 +6,7 @@ Henka development scripts keep generated state beneath the canonical
 repository's sibling `_local` directory, shared by its worktrees. The shared resolver in
 `scripts/henka_script_common.ps1` owns these locations:
 
-- builds and test fixtures: `_local/builds/<checkout-key>/`;
+- builds and test fixtures: `_local/bld/<compact-build-key>/`;
 - packages: `_local/packages/<checkout-key>/<package-name>/`;
 - evidence: `_local/evidence/<checkout-key>/`;
 - exact candidates: `_local/exact-candidates/`;
@@ -15,9 +15,9 @@ repository's sibling `_local` directory, shared by its worktrees. The shared res
 
 Use `Get-HenkaBuildRoot`, `Get-HenkaPackageRoot`, `Get-HenkaEvidenceRoot`, and
 `Get-HenkaExactCandidateRoot` rather than inventing another scratch root.
-Explicit generated paths are rejected unless they remain beneath `_local`.
-Ordinary scripts no longer create new `build/`, `out/`, or root-level `C:\hx-*`
-trees in the checkout or system drive.
+Explicit generated paths are kept beneath the repository-owned `_local`
+directory. Existing historical `build/` and `out/` directories are not used as
+the default location for new validation output.
 
 > **Current validated development path:** Windows 64-bit with Visual Studio 2022, MSVC, CMake, and PowerShell 5.1-compatible scripts.
 
@@ -82,9 +82,9 @@ not use them as its default storage roots.
 Stable validation scratch roots include:
 
 ```text
-_local/builds/<checkout-key>/tv/external_game_minimal/
-_local/builds/<checkout-key>/tv/external_server_minimal/
-_local/builds/<checkout-key>/test_tmp/terrain-process-integration/
+_local/bld/<compact-build-key>/tv/external_game_minimal/
+_local/bld/<compact-build-key>/tv/external_server_minimal/
+_local/bld/<compact-build-key>/test_tmp/terrain-process-integration/
 ```
 
 The validation scripts reuse these roots and retire old generated validation trees. Newly created persistent validation roots carry a `.henka-generated.json` marker with their owner, source commit, purpose, configuration, retention class, and cleanup condition. Inspect generated-output bounds with:
@@ -256,7 +256,7 @@ provenance.
 
 The GitHub Windows workflow covers the packaged Debug contract and bounded soak, then runs the Release build-and-test path before the external-game template validation. Each packaged-soak iteration has a finite process timeout and terminates the full child process tree on timeout; the CI soak step also has its own outer timeout so a hung graphical process cannot consume the entire job budget.
 
-Full Windows CI runs on `work/**` pushes, pull requests, and again after the merged result reaches `main`. Pull-request coverage is retained for external contributors and validates the GitHub PR integration boundary. To avoid serially paying for two long pre-merge gates, freeze the candidate and open the pull request while the exact-head branch run is active; merge only after both applicable validations are green and the head remains unchanged.
+Full Windows CI runs on `work/**` pushes, pull requests, and again after the merged result reaches `main`. Pull-request coverage is retained for external contributors and validates the GitHub PR integration boundary. Required checks must pass for the exact pull-request head before integration; the subsequent `main` run validates the merged result.
 
 ### Sanitized runtime gate
 
@@ -432,7 +432,7 @@ Validate `templates/external_game_minimal` with:
 ```
 
 The validation uses the stable scratch root at
-`_local/builds/<checkout-key>/tv/external_game_minimal/` and configures it against
+`_local/bld/<compact-build-key>/tv/external_game_minimal/` and configures it against
 the current Henka checkout.
 
 Current public-API coverage includes:

@@ -102,17 +102,9 @@ HDR environment lighting derives the following resources transactionally:
 
 IBL roughness lookup selects the supported seven-level 256x256 through 4x4
 prefilter chain. The resource-derived maximum LOD is authoritative for the
-shader lookup. The earlier localized IBL reflection-knot regression remains
-protected by executable negative controls, but exact-head normal-color,
-diffuse-only, specular-only, simple-environment, packaged reference, and
-renderer-family checks do not reproduce it.
-
-The separate nips/spot appearance is routed to Modeling and Authoring. It is
-not an active renderer-owned defect on the current exact head. Broader IBL
-authoring, probe-grid workflows, and other renderer backends remain future
-expansion.
-
-This is the current rasterized environment-lighting foundation. Path tracing and full-scene global illumination are not implemented.
+shader lookup. This is a bounded rasterized environment-lighting foundation;
+full-scene global illumination and path tracing are not implemented. Broader
+probe authoring workflows and other renderer backends remain future expansion.
 
 ### Local reflection probes
 

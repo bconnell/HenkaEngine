@@ -595,7 +595,12 @@ The new scene has no saved path. Save and Reload fail closed until a path exists
 
 ### Open Scene
 
-In Game Authoring, choose **Open** from the Actions group, enter a project-relative `.hscene` path, then choose **Open** in the path editor. Henka asks before replacing the current document. Cancel keeps the active scene and its edits. Confirm loads and validates the selected scene as an isolated candidate before switching; an invalid, missing, or unsupported scene leaves the current document active and reports the failure.
+In Game Authoring, choose **Open** from the Actions group. Henka asks before replacing the current document. Cancel keeps the active scene and its edits. Confirm loads and validates the selected scene as an isolated candidate before switching; an invalid, missing, or unsupported scene leaves the current document active and reports the failure.
+
+The Open Scene form lists project-relative `.hscene` files in a bounded,
+deterministically sorted catalog. Use its refresh control to rescan and its
+page controls to browse results; selecting an entry fills the path field. If
+the catalog is unavailable, enter a project-relative `.hscene` path manually.
 
 Open Scene does not change the `henka.project` startup-scene selection. Use **Save As** when the new scene should become the project's startup scene.
 

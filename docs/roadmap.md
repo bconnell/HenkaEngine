@@ -28,7 +28,7 @@ Henka Engine is an early-stage open source C17 game engine and integrated develo
 
 ## Current focus
 
-Henka is expanding its native 3D runtime and integrated editor into a practical game-development environment. Renderer and native modeling foundations are available within documented limits. Recent editor development includes editable transforms, scene naming, New Scene, transactional Save As, Open Scene, and Save/Discard/Cancel protection for scene transitions and window close. Near-term work includes project-wide dirty-state protection, multiple-scene project management, hierarchy organization, and broader authoring workflows.
+Henka is expanding its native 3D runtime and integrated editor into a practical game-development environment. Renderer and native modeling foundations are available within documented limits. The editor supports editable transforms, scene naming, New Scene, transactional Save As, Open Scene with a refreshable paginated scene catalog, Reload, and Save/Discard/Cancel protection for dirty Scene Document and Terrain state during transitions and window close. Remaining workflow priorities include broader project-wide dirty-state handling, multi-scene project management, hierarchy and object-organization persistence, remaining component-authoring workflows, and continued editor usability improvements.
 
 The remaining 3D roadmap covers:
 
@@ -80,8 +80,9 @@ flowchart LR
 
 ## Near-term priorities
 
-- Extend scene and project authoring, including reliable save/reopen, undo/redo, and protection of unsaved work.
-- Improve asset and material workflows, hierarchy editing, camera navigation, and the remaining 3D runtime/editor integrations.
+- Extend multi-scene project workflows and broaden unsaved-change tracking beyond the currently protected Scene Document and Terrain transitions.
+- Complete hierarchy and object-organization behavior across editing, history, persistence, runtime, and packaged workflows.
+- Finish remaining component-authoring workflows and improve asset/material authoring, camera navigation, and editor control usability.
 - Strengthen graphics correctness, performance, platform compatibility, and packaged execution across the documented hardware baseline.
 - Maintain stable identities, transactional edits, versioned data, and external-tool compatibility.
 - Expand the Action API with versioned semantic operations, capability discovery, permission boundaries, dry-run behavior, auditability, and structured errors.

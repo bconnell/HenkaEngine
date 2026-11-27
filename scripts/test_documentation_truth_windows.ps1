@@ -18,14 +18,17 @@ $copyTargets = @(
     "docs",
     "scripts\henka_script_common.ps1",
     "scripts\check_documentation_truth.ps1",
+    "scripts\package_dedicated_server_windows.ps1",
     "scripts\capture_visual_evidence_windows.ps1",
     "README.md",
+    "SECURITY.md",
     "SUPPORT.md",
     "CONTRIBUTING.md",
     "LICENSE",
     "engine\include\henka\scene_document.h",
     "engine\src\core\scene_document.c",
     "examples\sandbox3d\main.c",
+    "examples\sandbox3d\project_scene_catalog.c",
     "templates\external_game_minimal\src\main.c",
     "engine\src\mesh\authoring_mesh.c"
 )
@@ -386,6 +389,91 @@ try {
         throw "Documentation truth remained failed after the broken Markdown heading anchor probe was removed."
     }
     Write-Host "[pass] Documentation truth returned green after the broken Markdown heading anchor probe was removed."
+
+    $buildingPath = Join-Path $probeRoot "docs\building.md"
+    $buildingSource = [System.IO.File]::ReadAllText($buildingPath)
+    [System.IO.File]::AppendAllText(
+        $buildingPath,
+        [Environment]::NewLine + "Legacy path: _local/builds/<checkout-key>." + [Environment]::NewLine)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted a generated build path that disagrees with the shared resolver."
+    }
+    Write-Host "[pass] Documentation truth rejected stale generated build-root guidance."
+    [System.IO.File]::WriteAllText($buildingPath, $buildingSource)
+
+    $dedicatedServerPackagePath = Join-Path $probeRoot "scripts\package_dedicated_server_windows.ps1"
+    $dedicatedServerPackageSource = [System.IO.File]::ReadAllText($dedicatedServerPackagePath)
+    $stalePackageMetadata = $dedicatedServerPackageSource.Replace(
+        'Source executable (relative to build root): examples/dedicated_server/$Configuration/henka_dedicated_server.exe',
+        'Source executable: _local/builds/<checkout-key>/examples/dedicated_server/$Configuration/henka_dedicated_server.exe')
+    if ($stalePackageMetadata -eq $dedicatedServerPackageSource) {
+        throw "Documentation truth regression could not locate the dedicated-server provenance path."
+    }
+    [System.IO.File]::WriteAllText($dedicatedServerPackagePath, $stalePackageMetadata)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted stale dedicated-server package provenance."
+    }
+    Write-Host "[pass] Documentation truth rejected stale package provenance paths."
+    [System.IO.File]::WriteAllText($dedicatedServerPackagePath, $dedicatedServerPackageSource)
+
+    $securityPath = Join-Path $probeRoot "SECURITY.md"
+    $securitySource = [System.IO.File]::ReadAllText($securityPath)
+    [System.IO.File]::AppendAllText(
+        $securityPath,
+        [Environment]::NewLine + "Henka has no network-backed runtime behavior." + [Environment]::NewLine)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted a false blanket denial of existing network behavior."
+    }
+    Write-Host "[pass] Documentation truth rejected an inaccurate network-capability denial."
+    [System.IO.File]::WriteAllText($securityPath, $securitySource)
+
+    $helpPath = Join-Path $probeRoot "docs\help\sandbox3d.md"
+    $helpSource = [System.IO.File]::ReadAllText($helpPath)
+    $withoutSceneCatalog = [regex]::Replace(
+        $helpSource,
+        '(?ms)^The Open Scene form lists project-relative `\.hscene` files in a bounded,\r?\n.*?^the catalog is unavailable, enter a project-relative `\.hscene` path manually\.\r?\n',
+        "",
+        1)
+    if ($withoutSceneCatalog -eq $helpSource) {
+        throw "Documentation truth regression could not locate the Open Scene catalog guidance."
+    }
+    [System.IO.File]::WriteAllText($helpPath, $withoutSceneCatalog)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted missing Open Scene catalog guidance."
+    }
+    Write-Host "[pass] Documentation truth rejected missing Open Scene catalog guidance."
+    [System.IO.File]::WriteAllText($helpPath, $helpSource)
+
+    [System.IO.File]::AppendAllText(
+        $helpPath,
+        [Environment]::NewLine + "Open Scene accepts only a manually entered project-relative path." + [Environment]::NewLine)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted a stale path-only description of Open Scene."
+    }
+    Write-Host "[pass] Documentation truth rejected stale path-only Open Scene guidance."
+    [System.IO.File]::WriteAllText($helpPath, $helpSource)
+
+    $currentCapabilitiesPath = Join-Path $probeRoot "docs\current-capabilities.md"
+    $currentCapabilitiesSource = [System.IO.File]::ReadAllText($currentCapabilitiesPath)
+    [System.IO.File]::AppendAllText(
+        $currentCapabilitiesPath,
+        [Environment]::NewLine + "HSCN v16 and earlier files use the legacy default." + [Environment]::NewLine)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted an incomplete legacy HSCN version range."
+    }
+    Write-Host "[pass] Documentation truth rejected an incomplete legacy HSCN version range."
+    [System.IO.File]::WriteAllText($currentCapabilitiesPath, $currentCapabilitiesSource)
+
+    $realismPath = Join-Path $probeRoot "docs\realism.md"
+    $realismSource = [System.IO.File]::ReadAllText($realismPath)
+    [System.IO.File]::AppendAllText(
+        $realismPath,
+        [Environment]::NewLine + "This regression remains protected by executable negative controls." + [Environment]::NewLine)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted internal defect-triage status in public realism documentation."
+    }
+    Write-Host "[pass] Documentation truth rejected internal defect-triage wording."
+    [System.IO.File]::WriteAllText($realismPath, $realismSource)
 
     $authoringMeshSourcePath = Join-Path $probeRoot "engine\src\mesh\authoring_mesh.c"
     $authoringMeshSource = [System.IO.File]::ReadAllText($authoringMeshSourcePath)

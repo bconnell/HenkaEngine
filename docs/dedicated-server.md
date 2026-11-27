@@ -34,7 +34,7 @@ The dedicated server omits graphical-client systems.
 The normal Windows build produces:
 
 ```text
-_local/builds/<checkout-key>/examples/dedicated_server/Debug/henka_dedicated_server.exe
+_local/bld/<compact-build-key>/examples/dedicated_server/Debug/henka_dedicated_server.exe
 ```
 
 A server-only configuration is also supported without a C++ compiler or graphical client providers:

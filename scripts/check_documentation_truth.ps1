@@ -47,6 +47,16 @@ $externalTemplate = Get-RepositoryText "templates/external_game_minimal/src/main
 $sandboxMain = Get-RepositoryText "examples/sandbox3d/main.c"
 $sandboxHelp = Get-RepositoryText "docs/help/sandbox3d.md"
 $sandboxQa = Get-RepositoryText "docs/qa/sandbox3d-manual-checklist.md"
+$building = Get-RepositoryText "docs/building.md"
+$dedicatedServerDocs = Get-RepositoryText "docs/dedicated-server.md"
+$externalProjectDocs = Get-RepositoryText "docs/external-game-projects.md"
+$packageProvenanceDocs = Get-RepositoryText "docs/package-provenance.md"
+$securityPolicy = Get-RepositoryText "SECURITY.md"
+$realismDocs = Get-RepositoryText "docs/realism.md"
+$nextPhases = Get-RepositoryText "docs/roadmap-next-phases.md"
+$scriptCommon = Get-RepositoryText "scripts/henka_script_common.ps1"
+$dedicatedServerPackage = Get-RepositoryText "scripts/package_dedicated_server_windows.ps1"
+$sceneCatalogSource = Get-RepositoryText "examples/sandbox3d/project_scene_catalog.c"
 $showcaseAssets = Get-RepositoryText "docs/showcase-assets.md"
 $capabilityStatuses = Get-RepositoryText "docs/capability-statuses.tsv"
 
@@ -202,6 +212,91 @@ foreach ($workflowTerm in @("New Scene", "Save As", "Open Scene", "Reload", "Sav
     if ($sandboxHelp -notmatch [regex]::Escape($workflowTerm)) {
         Add-Finding "docs/help/sandbox3d.md: current packaged Game Authoring workflow is missing '$workflowTerm'"
     }
+}
+
+$buildRootImplementation = [regex]::Match(
+    $scriptCommon,
+    '(?ms)^function\s+Get-HenkaBuildRoot\s*\{(.*?)(?=^function\s|\z)')
+if (-not $buildRootImplementation.Success -or
+    $buildRootImplementation.Groups[1].Value -notmatch '(?i)Get-HenkaCheckoutStorageKey.{0,120}-CompactBuildKey' -or
+    $buildRootImplementation.Groups[1].Value -notmatch '(?i)Join-Path\s+\(Join-Path\s+\$localRoot\s+"bld"\)\s+\$buildKey') {
+    Add-Finding "scripts/henka_script_common.ps1: generated build-root contract could not be verified"
+}
+$buildRootDocs = @(
+    [pscustomobject]@{ Path = "docs/building.md"; Text = $building },
+    [pscustomobject]@{ Path = "docs/dedicated-server.md"; Text = $dedicatedServerDocs },
+    [pscustomobject]@{ Path = "docs/external-game-projects.md"; Text = $externalProjectDocs },
+    [pscustomobject]@{ Path = "docs/package-provenance.md"; Text = $packageProvenanceDocs }
+)
+foreach ($document in $buildRootDocs) {
+    if ($document.Text -notmatch [regex]::Escape('_local/bld/<compact-build-key>') -or
+        $document.Text -match [regex]::Escape('_local/builds/<checkout-key>')) {
+        Add-Finding "$($document.Path): generated build paths must match the shared build-root resolver"
+    }
+}
+if ($building -match '(?i)root-level\s+C:\\hx-|serially paying for two long pre-merge gates') {
+    Add-Finding "docs/building.md: remove machine-specific scratch paths and maintainer-only CI scheduling instructions"
+}
+if ($dedicatedServerPackage -notmatch '(?m)^Source executable \(relative to build root\): examples/dedicated_server/\$Configuration/henka_dedicated_server\.exe$' -or
+    $dedicatedServerPackage -match [regex]::Escape('_local/builds/<checkout-key>')) {
+    Add-Finding "scripts/package_dedicated_server_windows.ps1: package provenance must describe the source executable relative to the resolved build root"
+}
+
+$securityScope = [regex]::Match(
+    $securityPolicy,
+    '(?ms)^##\s+Scope\s*\r?\n(.*?)(?=^##\s|\z)')
+$securityExpectations = [regex]::Match(
+    $securityPolicy,
+    '(?ms)^##\s+Current security expectations\s*\r?\n(.*?)(?=^##\s|\z)')
+if (-not $securityScope.Success -or
+    $securityScope.Groups[1].Value -match '(?i)future network.{0,100}if those are added later') {
+    Add-Finding "SECURITY.md: scope must include the engine's current network and scripting surfaces"
+}
+if (-not $securityExpectations.Success -or
+    $securityPolicy -match '(?i)\bno\b.{0,160}\bnetwork-backed runtime behavior\b' -or
+    $securityExpectations.Groups[1].Value -notmatch '(?i)bounded ENet client/server networking' -or
+    $securityExpectations.Groups[1].Value -notmatch '(?i)dedicated-server host') {
+    Add-Finding "SECURITY.md: current security expectations must accurately describe bounded networking and hosted-service boundaries"
+}
+
+if ($realismDocs -match '(?i)regression remains protected by executable negative controls|routed to Modeling and Authoring|current exact head') {
+    Add-Finding "docs/realism.md: remove internal defect-triage status and retain durable capability limitations"
+}
+
+if ($sceneCatalogSource -notmatch '(?i)sandbox3d_project_scene_catalog_compare_entries' -or
+    $sceneCatalogSource -notmatch '(?i)qsort' -or
+    $sandboxMain -notmatch '(?i)sandbox3d_scene_path_editor_refresh_catalog' -or
+    $sandboxMain -notmatch '(?i)path_catalog_entry_buttons') {
+    Add-Finding "Sandbox scene catalog implementation could not be confirmed from its deterministic source and editor integration"
+}
+if ($capabilities -notmatch '(?is)Open Scene form.{0,300}catalog.{0,250}refresh.{0,250}page navigation' -or
+    $sandboxHelp -notmatch '(?is)Open Scene.{0,400}catalog.{0,250}page controls' -or
+    $sandboxHelp -notmatch '(?i)catalog is unavailable.{0,180}project-relative.{0,80}manually' -or
+    $sandboxQa -notmatch '(?is)scene catalog.{0,200}refreshed.{0,100}paged') {
+    Add-Finding "Open Scene catalog discovery, refresh, pagination, and manual-path fallback must be documented and included in manual QA"
+}
+if ($sandboxHelp -match '(?i)Open Scene accepts only a manually entered|Open Scene requires only a manually entered') {
+    Add-Finding "docs/help/sandbox3d.md: Open Scene also supports the project scene catalog"
+}
+if ($capabilities -match '(?i)HSCN v16 and earlier') {
+    Add-Finding "docs/current-capabilities.md: the legacy Scene Document range must include v1 through the version before the current writer"
+}
+$legacyWriterVersionMatch = [regex]::Match(
+    $sceneDocumentHeader,
+    '(?m)^#define\s+HENKA_SCENE_DOCUMENT_FORMAT_VERSION\s+UINT32_C\((\d+)\)')
+if ($legacyWriterVersionMatch.Success) {
+    $legacySceneVersion = [int]$legacyWriterVersionMatch.Groups[1].Value - 1
+    $sceneIdentitySection = [regex]::Match(
+        $capabilities,
+        '(?ms)^###\s+Scene identity and authored data\s*\r?\n(.*?)(?=^###\s|^##\s|\z)')
+    if ($legacySceneVersion -lt 1 -or
+        -not $sceneIdentitySection.Success -or
+        $sceneIdentitySection.Groups[1].Value -notmatch ('HSCN v1-v' + $legacySceneVersion)) {
+        Add-Finding "docs/current-capabilities.md: legacy default behavior must identify the complete pre-current HSCN version range"
+    }
+}
+if ($nextPhases -match '(?i)recent projects, project creation and opening') {
+    Add-Finding "docs/roadmap-next-phases.md: distinguish the planned project launcher from implemented scene-opening workflows"
 }
 
 $transformInspectorSection = [regex]::Match(
