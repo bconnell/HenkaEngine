@@ -7,6 +7,8 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'henka_script_common.ps1')
 . (Join-Path $PSScriptRoot 'henka_ui_automation_helpers.ps1')
+. (Join-Path $PSScriptRoot 'henka_packaged_startup_readiness.ps1')
+. (Join-Path $PSScriptRoot 'henka_packaged_scene_open_workflow.ps1')
 
 Add-Type -AssemblyName System.Drawing
 $temporaryRoot = Get-HenkaTestTemporaryRoot -RepositoryRoot $RepositoryRoot
@@ -300,6 +302,50 @@ try {
         $null -ne (ConvertFrom-HenkaScenePathEditorControlsLine `
             -Line $reorderedPathControlsLine -Mode 'open')) {
         throw 'Reordered Save As control geometry or mode authority was not enforced.'
+    }
+
+    $catalogPathControlsLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls visible=1 mode=open path_rect=10,20,200,28 confirm_rect=10,50,80,24 cancel_rect=100,50,80,24 relative_path_empty=0 relative_path=Scenes/Folder With Spaces/First Scene.hscene catalog_count=7 catalog_page=1 catalog_page_count=3 catalog_result=0 catalog_stale=0 refresh_rect=10,80,68,24 row0_rect=10,112,196,24 row0_path=Scenes/Folder With Spaces/First Scene.hscene row1_rect=10,140,196,24 row1_path=Scenes/Second Scene.hscene row2_rect=10,168,196,24 row2_path=<none> previous_rect=10,196,52,24 page_rect=68,196,80,24 next_rect=154,196,52,24.'
+    $catalogPathControls = ConvertFrom-HenkaScenePathEditorControlsLine `
+        -Line $catalogPathControlsLine `
+        -Mode 'open'
+    $catalogPathGeometry = ConvertTo-HenkaAutomationGeometryResult `
+        -Fields $catalogPathControls `
+        -Line $catalogPathControlsLine `
+        -RectangleMappings @('path_rect=path', 'confirm_rect=open')
+    if ($null -eq $catalogPathGeometry -or
+        $catalogPathControls.relative_path_empty -ne '0' -or
+        $catalogPathGeometry.Groups['open_x'].Value -ne '10' -or
+        $catalogPathGeometry.Groups['path_width'].Value -ne '200') {
+        throw 'Open Scene controls did not preserve geometry with the current catalog and spaced-path diagnostics.'
+    }
+    $catalogTelemetryPath = Join-Path $testDirectory 'scene-open-catalog.log'
+    Set-Content -LiteralPath $catalogTelemetryPath -Value $catalogPathControlsLine -Encoding UTF8
+    $parsedCatalog = Get-SceneOpenCatalogControls -Path $catalogTelemetryPath
+    if ($null -eq $parsedCatalog -or
+        -not ($parsedCatalog.PSObject.Properties.Name -contains 'Previous') -or
+        $parsedCatalog.Previous.X -ne 10.0 -or
+        $parsedCatalog.Previous.Y -ne 196.0 -or
+        $parsedCatalog.Previous.Width -ne 52.0 -or
+        $parsedCatalog.Previous.Height -ne 24.0 -or
+        $parsedCatalog.Page -ne 1 -or
+        $parsedCatalog.PageCount -ne 3) {
+        throw 'The packaged Open Scene catalog parser did not preserve its product-owned Previous page hit rectangle.'
+    }
+    $catalogOpenPathPattern = New-HenkaScenePathEditorStatePattern `
+        -Mode 'open' `
+        -RelativePath 'Scenes/Folder With Spaces/First Scene.hscene'
+    $emptyCatalogLine = $catalogPathControlsLine -replace `
+        'relative_path_empty=0 relative_path=.*? catalog_count=',
+        'relative_path_empty=1 relative_path=<empty> catalog_count='
+    $emptyOpenPathPattern = New-HenkaScenePathEditorStatePattern `
+        -Mode 'open' `
+        -RelativePath ''
+    $legacyEmptyOpenLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls visible=1 mode=open path_rect=10,20,200,28 confirm_rect=10,50,80,24 cancel_rect=100,50,80,24 relative_path_empty=1.'
+    if (-not [Regex]::IsMatch($catalogPathControlsLine, $catalogOpenPathPattern) -or
+        -not [Regex]::IsMatch($emptyCatalogLine, $emptyOpenPathPattern) -or
+        [Regex]::IsMatch($legacyEmptyOpenLine, $emptyOpenPathPattern) -or
+        [Regex]::IsMatch($catalogPathControlsLine, $emptyOpenPathPattern)) {
+        throw 'Scene path state patterns did not distinguish current catalog state from obsolete or conflicting telemetry.'
     }
     $reorderedSceneNameLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_name_controls rename_rect=190,50,90,36 field_rect=20,50,160,36 available=1 label_rect=20,20,120,24.'
     $sceneNameFields = ConvertFrom-HenkaSceneNameControlsLine -Line $reorderedSceneNameLine

@@ -1982,6 +1982,181 @@ void henka_test_sandbox3d_editor_layout(void)
             }
         }
 
+        {
+            const henka_ui_rect panels[] = {
+                {395.0f, 12.0f, 233.0f, 280.0f},
+                {300.0f, 12.0f, 340.0f, 280.0f}};
+            size_t panel_index;
+            for (panel_index = 0U;
+                 panel_index < sizeof(panels) / sizeof(panels[0]);
+                 ++panel_index)
+            {
+                sandbox3d_editor_details_scene_actions_layout catalog_layout =
+                    {0};
+                henka_ui_rect catalog_controls[12];
+                size_t control_count = 0U;
+                size_t control_index;
+                size_t prior_index;
+                const henka_ui_rect panel = panels[panel_index];
+                const henka_ui_rect scroll_viewport = {
+                    panel.x + 14.0f,
+                    panel.y + 38.0f,
+                    panel.width - 28.0f,
+                    panel.height - 46.0f};
+
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_details_open_scene_catalog(
+                        panel,
+                        scroll_viewport,
+                        true,
+                        &catalog_layout) == HENKA_SUCCESS);
+                HENKA_TEST_ASSERT(catalog_layout.visible);
+                HENKA_TEST_ASSERT(catalog_layout.path_editor_available);
+                HENKA_TEST_ASSERT(catalog_layout.path_editor_open_scene);
+                HENKA_TEST_ASSERT(
+                    catalog_layout.path_catalog_visible_entry_count == 3U);
+                HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                    panel, catalog_layout.action_row));
+
+                catalog_controls[control_count++] = catalog_layout.path_label;
+                catalog_controls[control_count++] = catalog_layout.path_field;
+                catalog_controls[control_count++] =
+                    catalog_layout.path_confirm_button;
+                catalog_controls[control_count++] =
+                    catalog_layout.path_cancel_button;
+                catalog_controls[control_count++] =
+                    catalog_layout.path_refresh_catalog_button;
+                catalog_controls[control_count++] =
+                    catalog_layout.path_catalog_status_label;
+                for (control_index = 0U; control_index < 3U; ++control_index)
+                {
+                    catalog_controls[control_count++] =
+                        catalog_layout.path_catalog_entry_buttons[
+                            control_index];
+                }
+                catalog_controls[control_count++] =
+                    catalog_layout.path_catalog_previous_button;
+                catalog_controls[control_count++] =
+                    catalog_layout.path_catalog_page_label;
+                catalog_controls[control_count++] =
+                    catalog_layout.path_catalog_next_button;
+                HENKA_TEST_ASSERT(control_count == 12U);
+                for (control_index = 0U;
+                     control_index < control_count;
+                     ++control_index)
+                {
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        catalog_layout.action_row,
+                        catalog_controls[control_index]));
+                    if (control_index > 0U)
+                    {
+                        for (prior_index = 0U;
+                             prior_index < control_index;
+                             ++prior_index)
+                        {
+                            HENKA_TEST_ASSERT(!henka_test_rects_overlap(
+                                catalog_controls[prior_index],
+                                catalog_controls[control_index]));
+                        }
+                    }
+                }
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    catalog_layout.path_catalog_entry_buttons[1].y,
+                    catalog_layout.path_catalog_entry_buttons[0].y + 28.0f,
+                    0.001f);
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    catalog_layout.path_catalog_entry_buttons[2].y,
+                    catalog_layout.path_catalog_entry_buttons[1].y + 28.0f,
+                    0.001f);
+            }
+
+            {
+                const float short_heights[] = {
+                    180.0f, 200.0f, 241.0f, 279.0f};
+                size_t short_index;
+                for (short_index = 0U;
+                     short_index < sizeof(short_heights) /
+                        sizeof(short_heights[0]);
+                     ++short_index)
+                {
+                    sandbox3d_editor_details_scene_actions_layout
+                        short_layout = {0};
+                    const henka_ui_rect short_panel = {
+                        300.0f, 12.0f, 340.0f, short_heights[short_index]};
+                    const henka_ui_rect short_scroll_viewport = {
+                        short_panel.x + 14.0f,
+                        short_panel.y + 38.0f,
+                        short_panel.width - 28.0f,
+                        short_panel.height - 46.0f};
+
+                    HENKA_TEST_ASSERT(
+                        sandbox3d_editor_layout_details_open_scene_catalog(
+                            short_panel,
+                            short_scroll_viewport,
+                            true,
+                            &short_layout) == HENKA_SUCCESS);
+                    HENKA_TEST_ASSERT(short_layout.visible);
+                    HENKA_TEST_ASSERT(short_layout.path_editor_available);
+                    HENKA_TEST_ASSERT(short_layout.path_editor_open_scene);
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        short_panel, short_layout.action_row));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        short_layout.action_row, short_layout.path_label));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        short_layout.action_row, short_layout.path_field));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        short_layout.action_row,
+                        short_layout.path_confirm_button));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        short_layout.action_row,
+                        short_layout.path_cancel_button));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        short_layout.action_row,
+                        short_layout.path_catalog_status_label));
+                    HENKA_TEST_ASSERT(
+                        short_layout.path_catalog_visible_entry_count == 0U);
+                    HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+                        short_layout.path_refresh_catalog_button));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+                        short_layout.path_catalog_entry_buttons[0]));
+                    HENKA_TEST_ASSERT(!henka_test_rect_is_empty(
+                        short_layout.path_catalog_status_label));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+                        short_layout.path_catalog_previous_button));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+                        short_layout.path_catalog_page_label));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+                        short_layout.path_catalog_next_button));
+                }
+            }
+
+            {
+                sandbox3d_editor_details_scene_actions_layout save_as_layout =
+                    {0};
+                HENKA_TEST_ASSERT(
+                    sandbox3d_editor_layout_details_scene_actions(
+                        panels[1],
+                        (henka_ui_rect){
+                            panels[1].x + 14.0f,
+                            panels[1].y + 38.0f,
+                            panels[1].width - 28.0f,
+                            panels[1].height - 46.0f},
+                        true,
+                        true,
+                        &save_as_layout) == HENKA_SUCCESS);
+                HENKA_TEST_ASSERT(save_as_layout.path_editor_available);
+                HENKA_TEST_ASSERT(!save_as_layout.path_editor_open_scene);
+                HENKA_TEST_ASSERT(
+                    save_as_layout.path_catalog_visible_entry_count == 0U);
+                HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+                    save_as_layout.path_refresh_catalog_button));
+                HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                    save_as_layout.action_row.height,
+                    56.0f,
+                    0.001f);
+            }
+        }
+
         HENKA_TEST_ASSERT(henka_ui_end_frame(ui_context) == HENKA_SUCCESS);
         henka_ui_destroy(ui_context);
     }

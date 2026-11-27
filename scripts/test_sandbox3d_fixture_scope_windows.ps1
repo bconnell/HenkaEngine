@@ -110,6 +110,9 @@ if ($packageText -match '"henka_sandbox3d_residency_fixtures"') {
 if ($packageText -notmatch 'generate_residency_fixtures_windows\.ps1') {
     throw "Packaging must generate opt-in residency fixtures directly after executable validation."
 }
+if ($packageText -match '(?is)"-ExecutionPolicy"\s*,\s*"Bypass"') {
+    throw "Packaging must honor the configured PowerShell execution policy for its local residency generator."
+}
 if ($packageText -match '(?s)\$residencyFixtureSource\s+-Destination.*?-Recurse') {
     throw "Packaging must copy only the bounded named residency fixtures, not the whole output directory."
 }

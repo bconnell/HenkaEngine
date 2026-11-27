@@ -276,14 +276,6 @@ function Send-HenkaSceneObjectsControlClick {
     Send-HenkaAutomationClickAt -EventPath $EventPath -X $x -Y $y
 }
 
-function Convert-HenkaAutomationNumber {
-    param([Parameter(Mandatory = $true)][string]$Value)
-
-    return [double]::Parse(
-        $Value,
-        [System.Globalization.CultureInfo]::InvariantCulture)
-}
-
 function Send-HenkaAutomationClickAt {
     param(
         [Parameter(Mandatory = $true)][string]$EventPath,
@@ -1387,7 +1379,9 @@ try {
         -EventPath $automationInputPath `
         -X ($saveAsX + ($saveAsWidth * 0.5)) `
         -Y ($saveAsY + ($saveAsHeight * 0.5))
-    $saveAsControlsPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls visible=1 mode=save_as .* relative_path_empty=1\.'
+    $saveAsControlsPattern = New-HenkaScenePathEditorStatePattern `
+        -Mode 'save_as' `
+        -RelativePath ''
     if (-not (Wait-FileContainsAfterOffset -Path $stdoutPath -Pattern $saveAsControlsPattern -StartingOffset $saveAsOpenOffset -TimeoutMilliseconds 10000)) {
         throw "Save As did not open its product path editor."
     }
@@ -1416,7 +1410,9 @@ try {
             ((Convert-HenkaAutomationNumber $saveAsControls.Groups['path_height'].Value) * 0.5))
     $saveAsPathStateOffset = Get-FileLengthSafe -Path $stdoutPath
     Send-HenkaAutomationText -EventPath $automationInputPath -Text $saveAsRelativePath
-    $saveAsPathReadyPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls visible=1 mode=save_as .* relative_path_empty=0\.'
+    $saveAsPathReadyPattern = New-HenkaScenePathEditorStatePattern `
+        -Mode 'save_as' `
+        -RelativePath $saveAsRelativePath
     if (-not (Wait-FileContainsAfterOffset -Path $stdoutPath -Pattern $saveAsPathReadyPattern -StartingOffset $saveAsPathStateOffset -TimeoutMilliseconds 10000)) {
         throw "The Save As editor did not publish fresh product state after its path changed."
     }

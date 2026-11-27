@@ -260,8 +260,6 @@ Invoke-HenkaNative `
     -FilePath "powershell.exe" `
     -Arguments @(
         "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
         "-File",
         $residencyGenerator,
         "-OutputDirectory",

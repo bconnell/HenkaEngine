@@ -313,6 +313,7 @@ The Object Details panel can display:
 
 Available actions include:
 
+- scene actions: New, Open, Save, Save As, and Reload;
 - visibility change;
 - camera focus;
 - transform reset;
@@ -320,6 +321,12 @@ Available actions include:
 - console object info;
 - supported material-instance editing/reimport/reset;
 - bounded Lua/HenkaScript attachment and source editing in the Game Authoring workflow.
+
+Open provides a refreshable, sorted, paginated list of project `.hscene` files.
+Selecting a row fills the project-relative path field; manual relative-path
+entry remains available. Choose **Open** to request the scene transition, then
+confirm the Save/Discard/Cancel prompt when the current scene has unsaved
+changes.
 
 ## Panel scrolling and presentation state
 

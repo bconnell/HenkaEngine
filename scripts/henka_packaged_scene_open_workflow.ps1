@@ -12,6 +12,177 @@ function Get-GameAuthoringPlayControls {
         -RectangleMappings @('trigger_rect=trigger', 'play_rect=play')
 }
 
+function Get-SceneOpenCatalogControls {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $number = '[-+]?\d+(?:\.\d+)?'
+    $rectangle = {
+        param([string]$Prefix)
+        return "(?<${Prefix}_x>$number),(?<${Prefix}_y>$number),(?<${Prefix}_width>$number),(?<${Prefix}_height>$number)"
+    }
+    $pattern = '(?m)^HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls ' +
+        '[^\r\n]*?mode=open[^\r\n]*?relative_path_empty=(?<relative_path_empty>[01]) ' +
+        'relative_path=(?<relative_path>.*?) catalog_count=(?<count>\d+) ' +
+        'catalog_page=(?<page>\d+) catalog_page_count=(?<page_count>\d+) ' +
+        'catalog_result=(?<result>-?\d+) catalog_stale=(?<stale>[01]) ' +
+        'refresh_rect=' + (& $rectangle 'refresh') + ' row0_rect=' +
+        (& $rectangle 'row0') + ' row0_path=(?<row0_path>.*?) ' +
+        'row1_rect=' + (& $rectangle 'row1') +
+        ' row1_path=(?<row1_path>.*?) row2_rect=' + (& $rectangle 'row2') +
+        ' row2_path=(?<row2_path>.*?) previous_rect=' +
+        (& $rectangle 'previous') + ' page_rect=' + (& $rectangle 'page') +
+        ' next_rect=' + (& $rectangle 'next') + '\.'
+    $line = Get-LastLogRegexMatch -Path $Path -Pattern $pattern
+    if ($null -eq $line) { return $null }
+
+    $rows = @(
+        foreach ($rowIndex in 0..2) {
+            $prefix = "row$rowIndex"
+            [pscustomobject]@{
+                Path = [string]$line.Groups["${prefix}_path"].Value
+                X = Convert-HenkaAutomationNumber $line.Groups["${prefix}_x"].Value
+                Y = Convert-HenkaAutomationNumber $line.Groups["${prefix}_y"].Value
+                Width = Convert-HenkaAutomationNumber $line.Groups["${prefix}_width"].Value
+                Height = Convert-HenkaAutomationNumber $line.Groups["${prefix}_height"].Value
+            }
+        }
+    )
+    return [pscustomobject]@{
+        RelativePath = [string]$line.Groups['relative_path'].Value
+        RelativePathEmpty = [int]$line.Groups['relative_path_empty'].Value
+        Count = [int]$line.Groups['count'].Value
+        Page = [int]$line.Groups['page'].Value
+        PageCount = [int]$line.Groups['page_count'].Value
+        Result = [int]$line.Groups['result'].Value
+        Stale = [int]$line.Groups['stale'].Value
+        Rows = $rows
+        Previous = [pscustomobject]@{
+            X = Convert-HenkaAutomationNumber $line.Groups['previous_x'].Value
+            Y = Convert-HenkaAutomationNumber $line.Groups['previous_y'].Value
+            Width = Convert-HenkaAutomationNumber $line.Groups['previous_width'].Value
+            Height = Convert-HenkaAutomationNumber $line.Groups['previous_height'].Value
+        }
+        Next = [pscustomobject]@{
+            X = Convert-HenkaAutomationNumber $line.Groups['next_x'].Value
+            Y = Convert-HenkaAutomationNumber $line.Groups['next_y'].Value
+            Width = Convert-HenkaAutomationNumber $line.Groups['next_width'].Value
+            Height = Convert-HenkaAutomationNumber $line.Groups['next_height'].Value
+        }
+        Line = $line.Value
+    }
+}
+
+function Invoke-SceneOpenCatalogPage {
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Context,
+        [Parameter(Mandatory = $true)][pscustomobject]$Panel,
+        [Parameter(Mandatory = $true)][ValidateSet('previous', 'next')][string]$Direction
+    )
+
+    $catalog = Get-SceneOpenCatalogControls -Path $Context.StdoutPath
+    if ($null -eq $catalog -or $catalog.Result -ne 0 -or $catalog.Stale -ne 0) {
+        throw 'The product did not expose a current, successful Open Scene catalog before page navigation.'
+    }
+    $pageDelta = if ($Direction -eq 'next') { 1 } else { -1 }
+    $expectedPage = $catalog.Page + $pageDelta
+    if ($expectedPage -lt 0 -or $expectedPage -ge $catalog.PageCount) {
+        throw "Open Scene $Direction navigation was requested outside the current page bounds."
+    }
+    $control = if ($Direction -eq 'next') { $catalog.Next } else { $catalog.Previous }
+    if ($control.Width -le 0.0 -or $control.Height -le 0.0 -or
+        $control.X -lt ($Panel.X - 0.5) -or
+        $control.Y -lt ($Panel.Y - 0.5) -or
+        ($control.X + $control.Width) -gt ($Panel.X + $Panel.Width + 0.5) -or
+        ($control.Y + $control.Height) -gt ($Panel.Y + $Panel.Height + 0.5)) {
+        throw "The product-reported Open Scene $Direction control was outside visible Object Details."
+    }
+
+    $pageOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+    Send-HenkaAutomationClickAt `
+        -EventPath $Context.AutomationInputPath `
+        -X ($control.X + ($control.Width * 0.5)) `
+        -Y ($control.Y + ($control.Height * 0.5))
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $Context.StdoutPath `
+            -Pattern ('catalog_page=' + $expectedPage + '\b') `
+            -StartingOffset $pageOffset `
+            -TimeoutMilliseconds 10000)) {
+        throw "The real Open Scene $Direction control did not advance the catalog page."
+    }
+
+    $updated = Get-SceneOpenCatalogControls -Path $Context.StdoutPath
+    if ($null -eq $updated -or $updated.Result -ne 0 -or $updated.Stale -ne 0 -or
+        $updated.Page -ne $expectedPage -or $updated.PageCount -ne $catalog.PageCount -or
+        $updated.RelativePathEmpty -ne $catalog.RelativePathEmpty -or
+        $updated.RelativePath -ne $catalog.RelativePath) {
+        throw "Open Scene $Direction changed the page without preserving the current catalog/path state."
+    }
+    return $updated
+}
+
+function Invoke-SceneOpenCatalogSelection {
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Context,
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][pscustomobject]$Panel
+    )
+
+    for ($pageAttempt = 0; $pageAttempt -lt 43; $pageAttempt++) {
+        $catalog = Get-SceneOpenCatalogControls -Path $Context.StdoutPath
+        if ($null -eq $catalog -or $catalog.Count -le 0 -or
+            $catalog.Result -ne 0 -or $catalog.Stale -ne 0) {
+            throw "The product did not expose a current, successful Open Scene catalog."
+        }
+        foreach ($row in $catalog.Rows) {
+            if ([string]::Equals(
+                    $row.Path,
+                    $RelativePath,
+                    [System.StringComparison]::OrdinalIgnoreCase)) {
+                if ($row.Width -le 0.0 -or $row.Height -le 0.0 -or
+                    $row.X -lt ($Panel.X - 0.5) -or
+                    $row.Y -lt ($Panel.Y - 0.5) -or
+                    ($row.X + $row.Width) -gt ($Panel.X + $Panel.Width + 0.5) -or
+                    ($row.Y + $row.Height) -gt ($Panel.Y + $Panel.Height + 0.5)) {
+                    throw "The selected Open Scene catalog row was outside visible Object Details."
+                }
+                $selectionOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+                Send-HenkaAutomationClickAt `
+                    -EventPath $Context.AutomationInputPath `
+                    -X ($row.X + ($row.Width * 0.5)) `
+                    -Y ($row.Y + ($row.Height * 0.5))
+                $selectedPathPattern = 'scene_path_editor_controls .* relative_path_empty=0 relative_path=' +
+                    [Regex]::Escape($RelativePath) + ' catalog_count='
+                if (-not (Wait-FileContainsAfterOffset `
+                        -Path $Context.StdoutPath `
+                        -Pattern $selectedPathPattern `
+                        -StartingOffset $selectionOffset `
+                        -TimeoutMilliseconds 10000)) {
+                    throw "A real catalog-row click did not publish the selected canonical scene path."
+                }
+                $selected = Get-SceneOpenCatalogControls -Path $Context.StdoutPath
+                if ($null -eq $selected -or
+                    -not [string]::Equals(
+                        $selected.RelativePath,
+                        $RelativePath,
+                        [System.StringComparison]::OrdinalIgnoreCase)) {
+                    throw "The Open Scene path state did not match the clicked catalog entry."
+                }
+                return $selected
+            }
+        }
+
+        if ($catalog.PageCount -le 1 -or
+            $catalog.Page + 1 -ge $catalog.PageCount) {
+            break
+        }
+        $catalog = Invoke-SceneOpenCatalogPage `
+            -Context $Context `
+            -Panel $Panel `
+            -Direction 'next'
+    }
+    throw "The packaged Open Scene catalog did not contain the required saved scene '$RelativePath'."
+}
+
 function Get-GameAuthoringPhysicsDisclosureControls {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -29,6 +200,30 @@ function Get-GameAuthoringPhysicsDisclosureControls {
 function Invoke-HenkaPackagedSceneOpenWorkflow {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][hashtable]$Context)
+
+    $runtimePrefix = [System.IO.Path]::GetFullPath([string]$Context.RuntimeDirectory).TrimEnd('\') + '\'
+    $savedScenePath = [System.IO.Path]::GetFullPath([string]$Context.SavedScenePath)
+    if (-not $savedScenePath.StartsWith($runtimePrefix, [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-Path -LiteralPath $savedScenePath -PathType Leaf)) {
+        throw 'The Open Scene pagination fixture source was missing or outside its owned packaged runtime.'
+    }
+    $savedSceneHash = (Get-FileHash -LiteralPath $savedScenePath -Algorithm SHA256).Hash
+    if ($savedSceneHash -ne [string]$Context.SavedSceneHash) {
+        throw 'The Open Scene pagination fixture source changed after its saved-scene proof.'
+    }
+    $sceneDirectory = Split-Path -Parent $savedScenePath
+    $fixtureNames = @('OpenCatalogPageFixture01.hscene', 'OpenCatalogPageFixture02.hscene')
+    foreach ($fixtureName in $fixtureNames) {
+        $fixturePath = Join-Path $sceneDirectory $fixtureName
+        if (Test-Path -LiteralPath $fixturePath) {
+            throw "The packaged Open Scene pagination fixture path already exists: $fixtureName"
+        }
+        Copy-Item -LiteralPath $savedScenePath -Destination $fixturePath
+        if ((Get-FileHash -LiteralPath $fixturePath -Algorithm SHA256).Hash -ne $savedSceneHash) {
+            throw "The Open Scene pagination fixture did not preserve valid scene data: $fixtureName"
+        }
+    }
+    Write-Output '[fixture] Added two byte-verified scene documents inside the owned runtime to exercise catalog pagination.'
 
     $dirtySceneName = $Context.ExpectedCurrentSceneName + ' Unsaved Open Draft'
     $sceneNameControls = Get-SceneNameControls -Path $Context.StdoutPath
@@ -86,13 +281,28 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
         throw "Open Scene is not wholly inside the visible Object Details panel."
     }
     $openFormOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+    $emptyOpenFormPattern = New-HenkaScenePathEditorStatePattern `
+        -Mode 'open' `
+        -RelativePath ''
     Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($openButton.X + ($openButton.Width * 0.5)) -Y ($openButton.Y + ($openButton.Height * 0.5))
-    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_path_editor_controls visible=1 mode=open .* relative_path_empty=1\.' -StartingOffset $openFormOffset -TimeoutMilliseconds 10000)) {
+    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $emptyOpenFormPattern -StartingOffset $openFormOffset -TimeoutMilliseconds 10000)) {
         throw "The real Open Scene control did not open its project-relative path editor."
     }
     $pathControls = Get-SceneOpenControls -Path $Context.StdoutPath
     if ($null -eq $pathControls -or [int]$pathControls.Groups['relative_path_empty'].Value -ne 1) {
         throw "The Open Scene path field, Open, or Cancel control was not reported."
+    }
+    $initialCatalog = Get-SceneOpenCatalogControls -Path $Context.StdoutPath
+    if ($null -eq $initialCatalog -or $initialCatalog.Result -ne 0 -or
+        $initialCatalog.Stale -ne 0 -or $initialCatalog.Page -ne 0 -or
+        $initialCatalog.Count -lt 4 -or $initialCatalog.PageCount -lt 2) {
+        throw 'The real Open Scene catalog did not expose at least two current, populated pages.'
+    }
+    $initialPagePaths = @($initialCatalog.Rows | ForEach-Object { $_.Path })
+    foreach ($fixtureName in $fixtureNames) {
+        if ($initialPagePaths -notcontains $fixtureName) {
+            throw "The first product catalog page did not expose its fixture scene: $fixtureName"
+        }
     }
     $pathRects = @(
         [pscustomobject]@{ X = Convert-HenkaAutomationNumber $pathControls.Groups['path_x'].Value; Y = Convert-HenkaAutomationNumber $pathControls.Groups['path_y'].Value; Width = Convert-HenkaAutomationNumber $pathControls.Groups['path_width'].Value; Height = Convert-HenkaAutomationNumber $pathControls.Groups['path_height'].Value },
@@ -104,24 +314,43 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
         }
     }
 
-    $formScreenshot = Join-Path $Context.RuntimeDirectory "open-scene-form.png"
-    $null = Save-HenkaProductFramebufferScreenshot -Process $Context.Process -StdoutPath $Context.StdoutPath -CaptureDirectory $Context.FrameCaptureDirectory -RequestFile $Context.FrameCaptureRequestPath -Description "Packaged Open Scene path form" -DestinationPath $formScreenshot
     $openRelativePath = 'sandbox3d_scene.hscene'
-    Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($pathRects[0].X + ($pathRects[0].Width * 0.5)) -Y ($pathRects[0].Y + ($pathRects[0].Height * 0.5))
-    Clear-HenkaTextField -EventPath $Context.AutomationInputPath
-    $pathTextOffset = Get-FileLengthSafe -Path $Context.StdoutPath
-    Send-HenkaAutomationText -EventPath $Context.AutomationInputPath -Text $openRelativePath
-    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'input record=\d+ type=text' -StartingOffset $pathTextOffset -TimeoutMilliseconds 10000)) {
-        throw "The Open Scene path field did not consume the typed project-relative path."
-    }
+    $formScreenshot = Join-Path $Context.RuntimeDirectory "open-scene-form.png"
+    $null = Save-HenkaProductFramebufferScreenshot -Process $Context.Process -StdoutPath $Context.StdoutPath -CaptureDirectory $Context.FrameCaptureDirectory -RequestFile $Context.FrameCaptureRequestPath -Description "Packaged Open Scene catalog" -DestinationPath $formScreenshot
+    $catalogSelection = Invoke-SceneOpenCatalogSelection `
+        -Context $Context `
+        -RelativePath $openRelativePath `
+        -Panel $panel
+    $catalogScreenshot = Join-Path $Context.RuntimeDirectory "open-scene-catalog-selection.png"
+    $null = Save-HenkaProductFramebufferScreenshot -Process $Context.Process -StdoutPath $Context.StdoutPath -CaptureDirectory $Context.FrameCaptureDirectory -RequestFile $Context.FrameCaptureRequestPath -Description "Packaged Open Scene selected catalog entry" -DestinationPath $catalogScreenshot
     $pathControls = Get-SceneOpenControls -Path $Context.StdoutPath
     if ($null -eq $pathControls) {
-        throw "Current product-owned Open Scene geometry was unavailable after text input."
+        throw "Current product-owned Open Scene geometry was unavailable after selecting a catalog row."
     }
-    # The control report is edge-triggered by geometry and its relative_path_empty
-    # field can remain from the initial empty form after text entry. Input
-    # consumption is checked above; the pending-action diagnostic below proves
-    # which path the product actually accepted.
+    if ($catalogSelection.RelativePathEmpty -ne 0 -or
+        $catalogSelection.RelativePath -ne $openRelativePath) {
+        throw "The selected catalog entry did not populate the Open Scene path field."
+    }
+    if ($catalogSelection.Page -ne 1 -or $catalogSelection.PageCount -lt 2) {
+        throw 'The target packaged scene was not selected from the product-reachable second catalog page.'
+    }
+    $returnedToFirstPage = Invoke-SceneOpenCatalogPage `
+        -Context $Context `
+        -Panel $panel `
+        -Direction 'previous'
+    if ($returnedToFirstPage.Page -ne 0 -or
+        $returnedToFirstPage.RelativePath -ne $openRelativePath) {
+        throw 'The real Open Scene Previous control did not return to page one while preserving the selected path.'
+    }
+    $returnedToSecondPage = Invoke-SceneOpenCatalogPage `
+        -Context $Context `
+        -Panel $panel `
+        -Direction 'next'
+    if ($returnedToSecondPage.Page -ne 1 -or
+        $returnedToSecondPage.RelativePath -ne $openRelativePath) {
+        throw 'The real Open Scene Next control did not restore page two while preserving the selected path.'
+    }
+    Write-Output '[pass] Packaged Open Scene traversed Previous and Next through live product rectangles on a multi-page catalog.'
     $openRect = [pscustomobject]@{
         X = Convert-HenkaAutomationNumber $pathControls.Groups['open_x'].Value
         Y = Convert-HenkaAutomationNumber $pathControls.Groups['open_y'].Value
@@ -571,7 +800,7 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
     }
     $invalidFormOffset = Get-FileLengthSafe -Path $Context.StdoutPath
     Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($openButton.X + ($openButton.Width * 0.5)) -Y ($openButton.Y + ($openButton.Height * 0.5))
-    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_path_editor_controls visible=1 mode=open .* relative_path_empty=1\.' -StartingOffset $invalidFormOffset -TimeoutMilliseconds 10000)) {
+    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $emptyOpenFormPattern -StartingOffset $invalidFormOffset -TimeoutMilliseconds 10000)) {
         throw "Open Scene did not reopen for the invalid-path negative control."
     }
     $pathControls = Get-SceneOpenControls -Path $Context.StdoutPath
@@ -1008,5 +1237,5 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
         throw "Closing after Save changed the project's existing startup-scene authority."
     }
     Write-Output "[pass] Packaged Open Scene and close protection used normal product input: invalid Open preserved the loaded document, Close Cancel retained the dirty scene, and Close Save persisted it before clean exit. Close prompt screenshot: $closePromptScreenshot"
-    Write-Output "[pass] Open Scene visual evidence: $formScreenshot, $openedScreenshot, $focusScreenshot, $failureScreenshot"
+    Write-Output "[pass] Open Scene visual evidence: $formScreenshot, $catalogScreenshot, $openedScreenshot, $focusScreenshot, $failureScreenshot"
 }

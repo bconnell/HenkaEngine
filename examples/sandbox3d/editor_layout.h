@@ -339,6 +339,8 @@ typedef struct sandbox3d_editor_details_footer_layout
     size_t row_count;
 } sandbox3d_editor_details_footer_layout;
 
+#define SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS 3U
+
 typedef struct sandbox3d_editor_details_scene_actions_layout
 {
     henka_ui_rect action_row;
@@ -351,9 +353,18 @@ typedef struct sandbox3d_editor_details_scene_actions_layout
     henka_ui_rect path_field;
     henka_ui_rect path_confirm_button;
     henka_ui_rect path_cancel_button;
+    henka_ui_rect path_refresh_catalog_button;
+    henka_ui_rect path_catalog_status_label;
+    henka_ui_rect path_catalog_entry_buttons[
+        SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS];
+    henka_ui_rect path_catalog_previous_button;
+    henka_ui_rect path_catalog_page_label;
+    henka_ui_rect path_catalog_next_button;
     henka_ui_rect scroll_viewport;
+    size_t path_catalog_visible_entry_count;
     bool compact;
     bool path_editor_open;
+    bool path_editor_open_scene;
     bool path_editor_available;
     bool visible;
 } sandbox3d_editor_details_scene_actions_layout;
@@ -367,6 +378,11 @@ henka_result sandbox3d_editor_layout_details_scene_actions(
     henka_ui_rect base_scroll_viewport,
     bool controls_available,
     bool path_editor_open,
+    sandbox3d_editor_details_scene_actions_layout* out_layout);
+henka_result sandbox3d_editor_layout_details_open_scene_catalog(
+    henka_ui_rect panel_bounds,
+    henka_ui_rect base_scroll_viewport,
+    bool controls_available,
     sandbox3d_editor_details_scene_actions_layout* out_layout);
 float sandbox3d_editor_layout_details_empty_selection_text_y(
     henka_ui_rect panel_bounds,

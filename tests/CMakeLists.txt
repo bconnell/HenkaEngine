@@ -398,6 +398,33 @@ add_test(
     COMMAND henka_sandbox3d_project_manifest_tests
 )
 
+if(TARGET SDL3::SDL3 OR TARGET SDL3::SDL3-static)
+    add_executable(henka_sandbox3d_project_scene_catalog_tests
+        ../examples/sandbox3d/project_scene_catalog.c
+        ../examples/sandbox3d/scene_path_editor.c
+        test_sandbox3d_project_scene_catalog.c
+    )
+
+    target_link_libraries(henka_sandbox3d_project_scene_catalog_tests
+        PRIVATE
+            henka
+    )
+    if(TARGET SDL3::SDL3)
+        target_link_libraries(
+            henka_sandbox3d_project_scene_catalog_tests PRIVATE SDL3::SDL3)
+    else()
+        target_link_libraries(
+            henka_sandbox3d_project_scene_catalog_tests PRIVATE SDL3::SDL3-static)
+    endif()
+
+    henka_enable_project_warnings(henka_sandbox3d_project_scene_catalog_tests)
+
+    add_test(
+        NAME henka_sandbox3d_project_scene_catalog_tests
+        COMMAND henka_sandbox3d_project_scene_catalog_tests
+    )
+endif()
+
 add_executable(henka_sandbox3d_scene_hierarchy_projection_tests
     ../examples/sandbox3d/scene_hierarchy_projection.c
     test_sandbox3d_scene_hierarchy_projection.c

@@ -1465,6 +1465,14 @@ function ConvertTo-HenkaAutomationGeometryResult {
     return $result
 }
 
+function Convert-HenkaAutomationNumber {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    return [double]::Parse(
+        $Value,
+        [System.Globalization.CultureInfo]::InvariantCulture)
+}
+
 function ConvertFrom-HenkaSceneNameControlsLine {
     param([Parameter(Mandatory = $true)][string]$Line)
 
@@ -1517,6 +1525,29 @@ function ConvertFrom-HenkaScenePathEditorControlsLine {
         return $null
     }
     return $fields
+}
+
+function New-HenkaScenePathEditorStatePattern {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('open', 'save_as')]
+        [string]$Mode,
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$RelativePath
+    )
+
+    $pathIsEmpty = [string]::IsNullOrEmpty($RelativePath)
+    $pathState = if ($pathIsEmpty) {
+        '<empty>'
+    }
+    else {
+        [Regex]::Escape($RelativePath)
+    }
+    $emptyState = if ($pathIsEmpty) { '1' } else { '0' }
+    return 'scene_path_editor_controls visible=1 mode=' + $Mode +
+        ' .* relative_path_empty=' + $emptyState +
+        ' relative_path=' + $pathState + ' catalog_count=\d+'
 }
 
 function ConvertFrom-HenkaSceneTransitionControlsLine {

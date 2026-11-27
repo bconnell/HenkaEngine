@@ -2214,11 +2214,12 @@ float sandbox3d_editor_layout_details_empty_selection_text_y(
     return panel_bounds.y + 38.0f;
 }
 
-henka_result sandbox3d_editor_layout_details_scene_actions(
+static henka_result sandbox3d_editor_layout_details_scene_actions_internal(
     henka_ui_rect panel_bounds,
     henka_ui_rect base_scroll_viewport,
     bool controls_available,
     bool path_editor_open,
+    bool path_editor_open_scene,
     sandbox3d_editor_details_scene_actions_layout* out_layout)
 {
     sandbox3d_editor_details_scene_actions_layout candidate = {0};
@@ -2236,6 +2237,10 @@ henka_result sandbox3d_editor_layout_details_scene_actions(
     const double form_path_label_width = 52.0;
     const double form_path_min_width = 80.0;
     const double form_button_min_width = 64.0;
+    const double full_scene_catalog_action_height = 196.0;
+    const double scene_catalog_scroll_gap = 6.0;
+    const double scene_catalog_min_remaining_viewport = 32.0;
+    const double compact_open_scene_action_height = 84.0;
     const bool panel_values_valid =
         sandbox3d_editor_layout_float_is_valid(panel_bounds.x) &&
         sandbox3d_editor_layout_float_is_valid(panel_bounds.y) &&
@@ -2267,19 +2272,33 @@ henka_result sandbox3d_editor_layout_details_scene_actions(
         const double row_width = (double)panel_bounds.width - 28.0;
         const bool use_compact_grid = path_editor_open ||
             row_width < one_row_min_width;
+        const double scene_catalog_remaining_viewport =
+            (double)base_scroll_viewport.height -
+                (row_y + full_scene_catalog_action_height +
+                    scene_catalog_scroll_gap -
+                    (double)base_scroll_viewport.y);
+        const bool scene_catalog_fits = !path_editor_open_scene ||
+            scene_catalog_remaining_viewport >=
+                scene_catalog_min_remaining_viewport;
         const size_t button_columns = row_width >= one_row_min_width
             ? 5U
             : (row_width >= three_column_min_width ? 3U : 2U);
         const size_t button_rows =
             (5U + button_columns - 1U) / button_columns;
         const double action_row_height = path_editor_open
-            ? 56.0
+            ? (path_editor_open_scene
+                ? (scene_catalog_fits
+                    ? full_scene_catalog_action_height
+                    : compact_open_scene_action_height)
+                : 56.0)
             : (double)button_rows * 26.0 +
                 (double)(button_rows - 1U) * compact_gap;
         const double row_bottom = row_y + action_row_height;
-        const double required_scroll_top = row_bottom + 6.0;
+        const double required_scroll_top = row_bottom +
+            scene_catalog_scroll_gap;
 
         candidate.path_editor_open = path_editor_open;
+        candidate.path_editor_open_scene = path_editor_open_scene;
         if (row_width >= two_column_min_width &&
             row_bottom <= panel_bottom - 8.0 &&
             row_bottom <= (double)FLT_MAX)
@@ -2331,6 +2350,77 @@ henka_result sandbox3d_editor_layout_details_scene_actions(
                         (float)second_row_y,
                         (float)form_button_width,
                         26.0f};
+                    if (path_editor_open_scene)
+                    {
+                        if (scene_catalog_fits)
+                        {
+                            const double refresh_width = 68.0;
+                            const double pager_button_width = 52.0;
+                            const double catalog_y = row_y + 88.0;
+                            size_t catalog_row;
+
+                            candidate.path_refresh_catalog_button =
+                                (henka_ui_rect){
+                                    row_x,
+                                    (float)(row_y + 60.0),
+                                    (float)refresh_width,
+                                    24.0f};
+                            candidate.path_catalog_status_label =
+                                (henka_ui_rect){
+                                    row_x + (float)(refresh_width +
+                                        compact_gap),
+                                    (float)(row_y + 60.0),
+                                    (float)(row_width - refresh_width -
+                                        compact_gap),
+                                    24.0f};
+                            candidate.path_catalog_visible_entry_count =
+                                SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS;
+                            for (catalog_row = 0U;
+                                 catalog_row <
+                                    SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS;
+                                 ++catalog_row)
+                            {
+                                candidate.path_catalog_entry_buttons[
+                                    catalog_row] = (henka_ui_rect){
+                                        row_x,
+                                        (float)(catalog_y +
+                                            (24.0 + compact_gap) *
+                                                (double)catalog_row),
+                                        (float)row_width,
+                                        24.0f};
+                            }
+                            candidate.path_catalog_previous_button =
+                                (henka_ui_rect){
+                                    row_x,
+                                    (float)(row_y + 172.0),
+                                    (float)pager_button_width,
+                                    24.0f};
+                            candidate.path_catalog_page_label =
+                                (henka_ui_rect){
+                                    row_x + (float)(pager_button_width +
+                                        compact_gap),
+                                    (float)(row_y + 172.0),
+                                    (float)(row_width - pager_button_width *
+                                        2.0 - compact_gap * 2.0),
+                                    24.0f};
+                            candidate.path_catalog_next_button =
+                                (henka_ui_rect){
+                                    row_x + (float)(row_width -
+                                        pager_button_width),
+                                    (float)(row_y + 172.0),
+                                    (float)pager_button_width,
+                                    24.0f};
+                        }
+                        else
+                        {
+                            candidate.path_catalog_status_label =
+                                (henka_ui_rect){
+                                    row_x,
+                                    (float)(row_y + 60.0),
+                                    (float)row_width,
+                                    24.0f};
+                        }
+                    }
                     candidate.path_editor_available = true;
                 }
             }
@@ -2414,6 +2504,102 @@ henka_result sandbox3d_editor_layout_details_scene_actions(
             {
                 return HENKA_ERROR_NUMERIC_RANGE;
             }
+            if (candidate.path_editor_available &&
+                candidate.path_editor_open_scene)
+            {
+                henka_ui_rect catalog_controls[12];
+                size_t catalog_control_count = 0U;
+                size_t control_index;
+                size_t prior_index;
+                size_t catalog_row;
+                if (!sandbox3d_editor_layout_rect_has_area(
+                        candidate.path_catalog_status_label))
+                {
+                    return HENKA_ERROR_NUMERIC_RANGE;
+                }
+                if (candidate.path_catalog_visible_entry_count > 0U &&
+                    (!sandbox3d_editor_layout_rect_has_area(
+                        candidate.path_refresh_catalog_button) ||
+                     !sandbox3d_editor_layout_rect_has_area(
+                        candidate.path_catalog_previous_button) ||
+                     !sandbox3d_editor_layout_rect_has_area(
+                        candidate.path_catalog_page_label) ||
+                     !sandbox3d_editor_layout_rect_has_area(
+                        candidate.path_catalog_next_button)))
+                {
+                    return HENKA_ERROR_NUMERIC_RANGE;
+                }
+                for (catalog_row = 0U;
+                     catalog_row < candidate.path_catalog_visible_entry_count;
+                     ++catalog_row)
+                {
+                    if (!sandbox3d_editor_layout_rect_has_area(
+                            candidate.path_catalog_entry_buttons[catalog_row]))
+                    {
+                        return HENKA_ERROR_NUMERIC_RANGE;
+                    }
+                }
+                catalog_controls[catalog_control_count++] =
+                    candidate.path_label;
+                catalog_controls[catalog_control_count++] =
+                    candidate.path_field;
+                catalog_controls[catalog_control_count++] =
+                    candidate.path_confirm_button;
+                catalog_controls[catalog_control_count++] =
+                    candidate.path_catalog_status_label;
+                if (candidate.path_catalog_visible_entry_count > 0U)
+                {
+                    catalog_controls[catalog_control_count++] =
+                        candidate.path_cancel_button;
+                    catalog_controls[catalog_control_count++] =
+                        candidate.path_refresh_catalog_button;
+                    for (catalog_row = 0U;
+                         catalog_row <
+                            candidate.path_catalog_visible_entry_count;
+                         ++catalog_row)
+                    {
+                        catalog_controls[catalog_control_count++] =
+                            candidate.path_catalog_entry_buttons[catalog_row];
+                    }
+                    catalog_controls[catalog_control_count++] =
+                        candidate.path_catalog_previous_button;
+                    catalog_controls[catalog_control_count++] =
+                        candidate.path_catalog_page_label;
+                    catalog_controls[catalog_control_count++] =
+                        candidate.path_catalog_next_button;
+                }
+                else
+                {
+                    catalog_controls[catalog_control_count++] =
+                        candidate.path_cancel_button;
+                }
+                for (control_index = 0U;
+                     control_index < catalog_control_count;
+                     ++control_index)
+                {
+                    const henka_ui_rect control =
+                        catalog_controls[control_index];
+                    if (!sandbox3d_editor_layout_rect_contains_rect(
+                            candidate.action_row, control))
+                    {
+                        return HENKA_ERROR_NUMERIC_RANGE;
+                    }
+                    for (prior_index = 0U;
+                         prior_index < control_index;
+                         ++prior_index)
+                    {
+                        const henka_ui_rect prior =
+                            catalog_controls[prior_index];
+                        if (control.x < prior.x + prior.width &&
+                            control.x + control.width > prior.x &&
+                            control.y < prior.y + prior.height &&
+                            control.y + control.height > prior.y)
+                        {
+                            return HENKA_ERROR_NUMERIC_RANGE;
+                        }
+                    }
+                }
+            }
         }
         else if (!sandbox3d_editor_layout_rect_has_area(
                      candidate.new_scene_button) ||
@@ -2432,6 +2618,37 @@ henka_result sandbox3d_editor_layout_details_scene_actions(
 
     *out_layout = candidate;
     return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_editor_layout_details_scene_actions(
+    henka_ui_rect panel_bounds,
+    henka_ui_rect base_scroll_viewport,
+    bool controls_available,
+    bool path_editor_open,
+    sandbox3d_editor_details_scene_actions_layout* out_layout)
+{
+    return sandbox3d_editor_layout_details_scene_actions_internal(
+        panel_bounds,
+        base_scroll_viewport,
+        controls_available,
+        path_editor_open,
+        false,
+        out_layout);
+}
+
+henka_result sandbox3d_editor_layout_details_open_scene_catalog(
+    henka_ui_rect panel_bounds,
+    henka_ui_rect base_scroll_viewport,
+    bool controls_available,
+    sandbox3d_editor_details_scene_actions_layout* out_layout)
+{
+    return sandbox3d_editor_layout_details_scene_actions_internal(
+        panel_bounds,
+        base_scroll_viewport,
+        controls_available,
+        true,
+        true,
+        out_layout);
 }
 
 static bool sandbox3d_editor_layout_is_wrap_space(char value)
