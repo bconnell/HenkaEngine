@@ -274,125 +274,142 @@ henka_result sandbox3d_scene_path_editor_draw(
         char status[64];
 
         if (!layout->path_editor_open_scene ||
-            layout->path_catalog_visible_entry_count !=
-                SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS)
+            (layout->path_catalog_visible_entry_count != 0U &&
+             layout->path_catalog_visible_entry_count !=
+                SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS))
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
-        if (henka_ui_button(
+        if (layout->path_catalog_visible_entry_count == 0U)
+        {
+            result = henka_ui_label(
                 ui,
-                "game_authoring_open_scene_catalog_refresh",
-                layout->path_refresh_catalog_button,
-                "Refresh"))
-        {
-            (void)sandbox3d_scene_path_editor_refresh_catalog(
-                editor, project_root);
-        }
-        scene_count = editor->catalog != NULL ? editor->catalog->count : 0U;
-        page_count = scene_count == 0U ? 0U
-            : (scene_count +
-                SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS - 1U) /
-                SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS;
-        if (page_count > 0U && editor->catalog_page >= page_count)
-        {
-            editor->catalog_page = page_count - 1U;
-        }
-        else if (page_count == 0U)
-        {
-            editor->catalog_page = 0U;
-        }
-        if (editor->catalog_result != HENKA_SUCCESS)
-        {
-            (void)snprintf(status, sizeof(status),
-                editor->catalog_stale
-                    ? "Refresh failed; stale list."
-                    : "Scene list unavailable.");
-        }
-        else if (scene_count == 0U)
-        {
-            (void)snprintf(status, sizeof(status), "No scenes found.");
+                layout->path_catalog_status_label.x + 2.0f,
+                layout->path_catalog_status_label.y + 4.0f,
+                1.0f,
+                "Taller panel shows scenes.");
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
         }
         else
         {
-            (void)snprintf(status, sizeof(status), "%zu scenes", scene_count);
-        }
-        result = henka_ui_label(
-            ui,
-            layout->path_catalog_status_label.x + 2.0f,
-            layout->path_catalog_status_label.y + 4.0f,
-            1.0f,
-            status);
-        if (result != HENKA_SUCCESS)
-        {
-            return result;
-        }
-        for (row = 0U;
-             row < SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS;
-             ++row)
-        {
-            const char* selected_path = NULL;
-            if (sandbox3d_scene_path_editor_get_visible_catalog_entry(
-                    editor, row, &selected_path) != HENKA_SUCCESS)
-            {
-                continue;
-            }
             if (henka_ui_button(
                     ui,
-                    row == 0U
-                        ? "game_authoring_open_scene_catalog_entry_0"
-                        : (row == 1U
-                            ? "game_authoring_open_scene_catalog_entry_1"
-                            : "game_authoring_open_scene_catalog_entry_2"),
-                    layout->path_catalog_entry_buttons[row],
-                    selected_path))
+                    "game_authoring_open_scene_catalog_refresh",
+                    layout->path_refresh_catalog_button,
+                    "Refresh"))
             {
-                memcpy(editor->relative_path, selected_path,
-                    strlen(selected_path) + 1U);
+                (void)sandbox3d_scene_path_editor_refresh_catalog(
+                    editor, project_root);
             }
-        }
-        if (page_count > 1U)
-        {
-            char page_label[32];
-            if (henka_ui_button(
-                    ui,
-                    "game_authoring_open_scene_catalog_previous",
-                    layout->path_catalog_previous_button,
-                    "Prev") && editor->catalog_page > 0U)
+            scene_count = editor->catalog != NULL ? editor->catalog->count : 0U;
+            page_count = scene_count == 0U ? 0U
+                : (scene_count +
+                    SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS - 1U) /
+                    SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS;
+            if (page_count > 0U && editor->catalog_page >= page_count)
             {
-                --editor->catalog_page;
+                editor->catalog_page = page_count - 1U;
             }
-            if (henka_ui_button(
-                    ui,
-                    "game_authoring_open_scene_catalog_next",
-                    layout->path_catalog_next_button,
-                    "Next") && editor->catalog_page + 1U < page_count)
+            else if (page_count == 0U)
             {
-                ++editor->catalog_page;
+                editor->catalog_page = 0U;
             }
-            (void)snprintf(page_label, sizeof(page_label), "%zu/%zu",
-                editor->catalog_page + 1U, page_count);
+            if (editor->catalog_result != HENKA_SUCCESS)
+            {
+                (void)snprintf(status, sizeof(status),
+                    editor->catalog_stale
+                        ? "Refresh failed; stale list."
+                        : "Scene list unavailable.");
+            }
+            else if (scene_count == 0U)
+            {
+                (void)snprintf(status, sizeof(status), "No scenes found.");
+            }
+            else
+            {
+                (void)snprintf(status, sizeof(status), "%zu scenes", scene_count);
+            }
             result = henka_ui_label(
                 ui,
-                layout->path_catalog_page_label.x + 2.0f,
-                layout->path_catalog_page_label.y + 4.0f,
+                layout->path_catalog_status_label.x + 2.0f,
+                layout->path_catalog_status_label.y + 4.0f,
                 1.0f,
-                page_label);
+                status);
             if (result != HENKA_SUCCESS)
             {
                 return result;
             }
-        }
-        else if (page_count == 1U)
-        {
-            result = henka_ui_label(
-                ui,
-                layout->path_catalog_page_label.x + 2.0f,
-                layout->path_catalog_page_label.y + 4.0f,
-                1.0f,
-                "1/1");
-            if (result != HENKA_SUCCESS)
+            for (row = 0U;
+                 row < SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS;
+                 ++row)
             {
-                return result;
+                const char* selected_path = NULL;
+                if (sandbox3d_scene_path_editor_get_visible_catalog_entry(
+                        editor, row, &selected_path) != HENKA_SUCCESS)
+                {
+                    continue;
+                }
+                if (henka_ui_button(
+                        ui,
+                        row == 0U
+                            ? "game_authoring_open_scene_catalog_entry_0"
+                            : (row == 1U
+                                ? "game_authoring_open_scene_catalog_entry_1"
+                                : "game_authoring_open_scene_catalog_entry_2"),
+                        layout->path_catalog_entry_buttons[row],
+                        selected_path))
+                {
+                    memcpy(editor->relative_path, selected_path,
+                        strlen(selected_path) + 1U);
+                }
+            }
+            if (page_count > 1U)
+            {
+                char page_label[32];
+                if (henka_ui_button(
+                        ui,
+                        "game_authoring_open_scene_catalog_previous",
+                        layout->path_catalog_previous_button,
+                        "Prev") && editor->catalog_page > 0U)
+                {
+                    --editor->catalog_page;
+                }
+                if (henka_ui_button(
+                        ui,
+                        "game_authoring_open_scene_catalog_next",
+                        layout->path_catalog_next_button,
+                        "Next") && editor->catalog_page + 1U < page_count)
+                {
+                    ++editor->catalog_page;
+                }
+                (void)snprintf(page_label, sizeof(page_label), "%zu/%zu",
+                    editor->catalog_page + 1U, page_count);
+                result = henka_ui_label(
+                    ui,
+                    layout->path_catalog_page_label.x + 2.0f,
+                    layout->path_catalog_page_label.y + 4.0f,
+                    1.0f,
+                    page_label);
+                if (result != HENKA_SUCCESS)
+                {
+                    return result;
+                }
+            }
+            else if (page_count == 1U)
+            {
+                result = henka_ui_label(
+                    ui,
+                    layout->path_catalog_page_label.x + 2.0f,
+                    layout->path_catalog_page_label.y + 4.0f,
+                    1.0f,
+                    "1/1");
+                if (result != HENKA_SUCCESS)
+                {
+                    return result;
+                }
             }
         }
     }

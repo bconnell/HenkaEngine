@@ -2071,6 +2071,66 @@ void henka_test_sandbox3d_editor_layout(void)
             }
 
             {
+                const float short_heights[] = {
+                    180.0f, 200.0f, 241.0f, 279.0f};
+                size_t short_index;
+                for (short_index = 0U;
+                     short_index < sizeof(short_heights) /
+                        sizeof(short_heights[0]);
+                     ++short_index)
+                {
+                    sandbox3d_editor_details_scene_actions_layout
+                        short_layout = {0};
+                    const henka_ui_rect short_panel = {
+                        300.0f, 12.0f, 340.0f, short_heights[short_index]};
+                    const henka_ui_rect short_scroll_viewport = {
+                        short_panel.x + 14.0f,
+                        short_panel.y + 38.0f,
+                        short_panel.width - 28.0f,
+                        short_panel.height - 46.0f};
+
+                    HENKA_TEST_ASSERT(
+                        sandbox3d_editor_layout_details_open_scene_catalog(
+                            short_panel,
+                            short_scroll_viewport,
+                            true,
+                            &short_layout) == HENKA_SUCCESS);
+                    HENKA_TEST_ASSERT(short_layout.visible);
+                    HENKA_TEST_ASSERT(short_layout.path_editor_available);
+                    HENKA_TEST_ASSERT(short_layout.path_editor_open_scene);
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        short_panel, short_layout.action_row));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        short_layout.action_row, short_layout.path_label));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        short_layout.action_row, short_layout.path_field));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        short_layout.action_row,
+                        short_layout.path_confirm_button));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        short_layout.action_row,
+                        short_layout.path_cancel_button));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_contained(
+                        short_layout.action_row,
+                        short_layout.path_catalog_status_label));
+                    HENKA_TEST_ASSERT(
+                        short_layout.path_catalog_visible_entry_count == 0U);
+                    HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+                        short_layout.path_refresh_catalog_button));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+                        short_layout.path_catalog_entry_buttons[0]));
+                    HENKA_TEST_ASSERT(!henka_test_rect_is_empty(
+                        short_layout.path_catalog_status_label));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+                        short_layout.path_catalog_previous_button));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+                        short_layout.path_catalog_page_label));
+                    HENKA_TEST_ASSERT(henka_test_rect_is_empty(
+                        short_layout.path_catalog_next_button));
+                }
+            }
+
+            {
                 sandbox3d_editor_details_scene_actions_layout save_as_layout =
                     {0};
                 HENKA_TEST_ASSERT(
