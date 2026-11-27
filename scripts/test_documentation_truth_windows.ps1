@@ -18,6 +18,7 @@ $copyTargets = @(
     "docs",
     "scripts\henka_script_common.ps1",
     "scripts\check_documentation_truth.ps1",
+    "scripts\capture_visual_evidence_windows.ps1",
     "README.md",
     "SUPPORT.md",
     "CONTRIBUTING.md",
@@ -62,6 +63,46 @@ try {
     if ((Invoke-TruthCheck) -ne 0) {
         throw "Documentation truth baseline unexpectedly failed."
     }
+
+    $editorControlsPath = Join-Path $probeRoot "docs\editor-controls.md"
+    $editorControlsSource = [System.IO.File]::ReadAllText($editorControlsPath)
+    $withoutInspectorGuidance = [regex]::Replace(
+        $editorControlsSource,
+        '(?ms)^## Numeric World Transform Inspector\r?\n.*?(?=^## |\z)',
+        "")
+    [System.IO.File]::WriteAllText($editorControlsPath, $withoutInspectorGuidance)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted missing numeric World Transform Inspector guidance."
+    }
+    Write-Host "[pass] Documentation truth rejected missing numeric World Transform Inspector guidance."
+    [System.IO.File]::WriteAllText($editorControlsPath, $editorControlsSource)
+
+    $mcpHarnessPath = Join-Path $probeRoot "docs\mcp-qa-harness.md"
+    $mcpHarnessSource = [System.IO.File]::ReadAllText($mcpHarnessPath)
+    $withoutVisualEvidenceBoundary = [regex]::Replace(
+        $mcpHarnessSource,
+        '(?ms)^## Visual evidence boundary\r?\n.*?(?=^## |\z)',
+        "")
+    [System.IO.File]::WriteAllText($mcpHarnessPath, $withoutVisualEvidenceBoundary)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted an omitted application-owned framebuffer evidence boundary."
+    }
+    Write-Host "[pass] Documentation truth rejected the missing application-owned framebuffer evidence boundary."
+    [System.IO.File]::WriteAllText($mcpHarnessPath, $mcpHarnessSource)
+
+    $withoutMcpScopeClarification = [regex]::Replace(
+        $mcpHarnessSource,
+        '(?s)This MCP validation slice does not add framebuffer-capture, save, or reload\s+operations to the adapter\. The packaged capture workflow above is separate\s+from MCP; scene save and reload are exercised through their own product paths\.',
+        "The packaged capture workflow above is separate from MCP.")
+    if ($withoutMcpScopeClarification -eq $mcpHarnessSource) {
+        throw "Documentation regression could not remove the MCP scope clarification."
+    }
+    [System.IO.File]::WriteAllText($mcpHarnessPath, $withoutMcpScopeClarification)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted ambiguous MCP versus packaged capture scope."
+    }
+    Write-Host "[pass] Documentation truth rejected ambiguous MCP versus packaged capture scope."
+    [System.IO.File]::WriteAllText($mcpHarnessPath, $mcpHarnessSource)
 
     $staleGameAuthoringRow = [regex]::Replace(
         $readmeSource,
