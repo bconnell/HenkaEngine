@@ -40,6 +40,7 @@
 #include "object_details_tools.h"
 #include "interaction_tools.h"
 #include "terrain_autosave.h"
+#include "terrain_scene_transition.h"
 #include "physics_tools.h"
 #include "game_authoring.h"
 #include "scene_name_editor.h"
@@ -460,6 +461,7 @@ typedef struct sandbox3d_ui_geometry_report
     henka_entity entity;
     henka_ui_rect bounds;
     int state;
+    uint64_t state_signature;
 } sandbox3d_ui_geometry_report;
 
 typedef enum sandbox3d_scene_objects_control_report_index
@@ -914,6 +916,60 @@ static bool sandbox3d_ui_geometry_report_changed(
         return true;
     }
     return false;
+}
+
+static uint64_t sandbox3d_ui_state_signature_append(
+    uint64_t signature,
+    uint64_t value)
+{
+    unsigned int byte_index;
+    for (byte_index = 0U; byte_index < 8U; ++byte_index)
+    {
+        signature ^= (uint8_t)(value >> (byte_index * 8U));
+        signature *= UINT64_C(1099511628211);
+    }
+    return signature;
+}
+
+static uint64_t sandbox3d_ui_state_signature_hash_text(const char* text)
+{
+    uint64_t signature = UINT64_C(14695981039346656037);
+
+    if (text == NULL)
+    {
+        return signature;
+    }
+    while (*text != '\0')
+    {
+        signature ^= (uint8_t)*text;
+        signature *= UINT64_C(1099511628211);
+        ++text;
+    }
+    return signature;
+}
+
+static bool sandbox3d_ui_geometry_report_changed_with_signature(
+    sandbox3d_ui_geometry_report* report,
+    henka_entity entity,
+    henka_ui_rect bounds,
+    int state,
+    uint64_t state_signature)
+{
+    bool geometry_changed;
+    bool signature_changed;
+
+    if (report == NULL)
+    {
+        return true;
+    }
+    geometry_changed = sandbox3d_ui_geometry_report_changed(
+        report, entity, bounds, state);
+    signature_changed = report->state_signature != state_signature;
+    if (signature_changed)
+    {
+        report->state_signature = state_signature;
+    }
+    return geometry_changed || signature_changed;
 }
 
 static void sandbox3d_reset_ui_geometry_reports(sandbox3d_state* state)
@@ -15682,6 +15738,8 @@ static henka_result sandbox3d_apply_terrain_tool_command(
     henka_terrain_world_desc terrain_desc;
     int32_t center_sample_x = 32;
     int32_t center_sample_z = 32;
+    uint64_t content_hash_before = 0U;
+    bool content_hash_before_valid = false;
     henka_result result;
 
     if (state == NULL || state->terrain_world == NULL ||
@@ -15732,6 +15790,11 @@ static henka_result sandbox3d_apply_terrain_tool_command(
         : (int32_t)state->terrain_tool_strength * 8;
     command.paint_layer = state->terrain_tool_layer;
     command.paint_strength = state->terrain_tool_strength;
+    if (sandbox3d_automation_input_is_owned())
+    {
+        content_hash_before_valid = sandbox3d_terrain_world_content_hash(
+            state->terrain_world, &content_hash_before) == HENKA_SUCCESS;
+    }
     result = henka_terrain_edit_history_apply(
         state->terrain_edit_history, &command, command.client_nonce);
     if (result == HENKA_SUCCESS)
@@ -15780,6 +15843,26 @@ static henka_result sandbox3d_apply_terrain_tool_command(
             true,
             "Terrain command rejected: %s.",
             henka_result_to_string(result));
+    }
+    if (sandbox3d_automation_input_is_owned())
+    {
+        henka_terrain_world_stats world_stats = {0};
+        uint64_t content_hash_after = 0U;
+        const bool content_hash_after_valid =
+            sandbox3d_terrain_world_content_hash(
+                state->terrain_world, &content_hash_after) == HENKA_SUCCESS;
+        const bool world_stats_valid = henka_terrain_world_get_stats(
+            state->terrain_world, &world_stats) == HENKA_SUCCESS;
+        printf(
+            "HENKA_AUTOMATION_DIAGNOSTIC terrain_edit_state result=%d content_hash_before_valid=%u content_hash_before=%016llx content_hash_after_valid=%u content_hash_after=%016llx world_stats_valid=%u dirty_regions=%u.\n",
+            (int)result,
+            content_hash_before_valid ? 1U : 0U,
+            (unsigned long long)content_hash_before,
+            content_hash_after_valid ? 1U : 0U,
+            (unsigned long long)content_hash_after,
+            world_stats_valid ? 1U : 0U,
+            world_stats_valid ? world_stats.dirty_region_count : 0U);
+        fflush(stdout);
     }
     return result;
 }
@@ -30935,6 +31018,17 @@ static bool sandbox3d_details_flow_disclosure(
                     disclosure_bounds.width,
                     expanded_state);
                 fflush(stdout);
+                if (sandbox3d_automation_input_is_owned())
+                {
+                    printf(
+                        "HENKA_AUTOMATION_DIAGNOSTIC game_authoring_physics_disclosure available=1 entity_id=%llu expanded=%d rect=%.1f,%.1f,%.1f,28.0.\n",
+                        (unsigned long long)selected_entity,
+                        expanded_state,
+                        report_bounds.x,
+                        report_bounds.y,
+                        report_bounds.width);
+                    fflush(stdout);
+                }
             }
         }
     }
@@ -31041,6 +31135,130 @@ static const char* sandbox3d_scene_transition_name(
     }
 }
 
+typedef struct sandbox3d_scene_reload_context
+{
+    henka_engine* engine;
+    sandbox3d_state* state;
+} sandbox3d_scene_reload_context;
+
+static henka_result sandbox3d_load_terrain_transition_baseline(
+    void* user_data,
+    henka_terrain_region_id region_id,
+    henka_terrain_region_storage_info* out_info,
+    henka_terrain_sample* out_samples,
+    size_t sample_count)
+{
+    sandbox3d_scene_reload_context* context =
+        (sandbox3d_scene_reload_context*)user_data;
+    sandbox3d_state* state = context != NULL ? context->state : NULL;
+    henka_terrain_world_desc world_desc;
+    henka_terrain_layout layout = {0};
+    henka_result result;
+
+    if (state == NULL || state->terrain_world == NULL ||
+        state->terrain_storage == NULL || out_info == NULL ||
+        out_samples == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_storage_load_region(
+        state->terrain_storage,
+        region_id,
+        out_info,
+        out_samples,
+        sample_count);
+    if (result != HENKA_ERROR_ASSET_SOURCE)
+    {
+        return result;
+    }
+
+    result = henka_terrain_world_get_desc(state->terrain_world, &world_desc);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_world_desc_get_layout(&world_desc, &layout);
+    }
+    if (result != HENKA_SUCCESS || sample_count != layout.samples_per_region)
+    {
+        return result == HENKA_SUCCESS
+            ? HENKA_ERROR_INVALID_ARGUMENT
+            : result;
+    }
+    sandbox3d_generate_terrain_fixture(&layout, region_id, out_samples);
+    *out_info = (henka_terrain_region_storage_info){region_id, 1U, 1U};
+    return HENKA_SUCCESS;
+}
+
+static henka_result sandbox3d_refresh_terrain_transition_collision(
+    void* user_data)
+{
+    sandbox3d_scene_reload_context* context =
+        (sandbox3d_scene_reload_context*)user_data;
+    return context == NULL || context->state == NULL
+        ? HENKA_ERROR_INVALID_ARGUMENT
+        : sandbox3d_refresh_terrain_collision(context->state);
+}
+
+static henka_result sandbox3d_refresh_terrain_transition_render(
+    void* user_data)
+{
+    sandbox3d_scene_reload_context* context =
+        (sandbox3d_scene_reload_context*)user_data;
+    sandbox3d_state* state = context != NULL ? context->state : NULL;
+    henka_result result;
+    if (state == NULL || state->terrain_render == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_render_runtime_refresh_dirty(state->terrain_render);
+    return result == HENKA_SUCCESS
+        ? henka_terrain_render_runtime_pump(state->terrain_render, 1U)
+        : result;
+}
+
+static henka_result sandbox3d_reload_scene_document_for_transition(
+    void* user_data)
+{
+    sandbox3d_scene_reload_context* context =
+        (sandbox3d_scene_reload_context*)user_data;
+    return context == NULL || context->engine == NULL ||
+        context->state == NULL
+        ? HENKA_ERROR_INVALID_ARGUMENT
+        : sandbox3d_game_authoring_reload(
+            context->state->game_authoring,
+            henka_engine_get_user_data_base_path(context->engine));
+}
+
+static henka_result sandbox3d_stop_play_for_close_save(
+    sandbox3d_state* state)
+{
+    bool was_play_locked;
+    henka_result result = HENKA_SUCCESS;
+
+    if (state == NULL || state->game_authoring == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    was_play_locked = sandbox3d_game_authoring_is_play_locked(
+        state->game_authoring);
+    if (state->scene_transition_confirmation ==
+            SANDBOX3D_SCENE_TRANSITION_CONFIRMATION_CLOSE &&
+        was_play_locked)
+    {
+        result = sandbox3d_game_authoring_stop_play(state->game_authoring);
+    }
+    if (sandbox3d_automation_input_is_owned())
+    {
+        printf(
+            "HENKA_AUTOMATION_DIAGNOSTIC scene_close_play_save result=%d play_locked_before=%u play_locked_after=%u.\n",
+            (int)result,
+            was_play_locked ? 1U : 0U,
+            sandbox3d_game_authoring_is_play_locked(
+                state->game_authoring) ? 1U : 0U);
+        fflush(stdout);
+    }
+    return result;
+}
+
 static henka_result sandbox3d_execute_scene_transition(
     henka_engine* engine,
     sandbox3d_state* state)
@@ -31050,11 +31268,21 @@ static henka_result sandbox3d_execute_scene_transition(
                       : SANDBOX3D_SCENE_TRANSITION_CONFIRMATION_NONE;
     char target_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES] = {0};
     henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+    sandbox3d_terrain_transition_reload_report terrain_reload_report = {0};
+    sandbox3d_scene_reload_context reload_context = {engine, state};
+    uint64_t terrain_hash_before = 0U;
+    bool terrain_hash_before_valid = false;
 
     if (engine == NULL || state == NULL ||
         transition == SANDBOX3D_SCENE_TRANSITION_CONFIRMATION_NONE)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (transition == SANDBOX3D_SCENE_TRANSITION_CONFIRMATION_RELOAD &&
+        sandbox3d_automation_input_is_owned())
+    {
+        terrain_hash_before_valid = sandbox3d_terrain_world_content_hash(
+            state->terrain_world, &terrain_hash_before) == HENKA_SUCCESS;
     }
     memcpy(
         target_path,
@@ -31079,9 +31307,16 @@ static henka_result sandbox3d_execute_scene_transition(
                 : HENKA_ERROR_INVALID_ARGUMENT;
             break;
         case SANDBOX3D_SCENE_TRANSITION_CONFIRMATION_RELOAD:
-            result = sandbox3d_game_authoring_reload(
-                state->game_authoring,
-                henka_engine_get_user_data_base_path(engine));
+            result = sandbox3d_terrain_scene_transition_reload_discard(
+                &(sandbox3d_terrain_transition_reload_desc){
+                    state->terrain_world,
+                    &state->terrain_edit_history,
+                    sandbox3d_load_terrain_transition_baseline,
+                    sandbox3d_refresh_terrain_transition_collision,
+                    sandbox3d_refresh_terrain_transition_render,
+                    sandbox3d_reload_scene_document_for_transition,
+                    &reload_context},
+                &terrain_reload_report);
             if (result == HENKA_SUCCESS)
             {
                 state->audio_authoring_form_initialized = false;
@@ -31096,6 +31331,32 @@ static henka_result sandbox3d_execute_scene_transition(
         case SANDBOX3D_SCENE_TRANSITION_CONFIRMATION_NONE:
         default:
             break;
+    }
+
+    if (transition == SANDBOX3D_SCENE_TRANSITION_CONFIRMATION_RELOAD &&
+        sandbox3d_automation_input_is_owned())
+    {
+        uint64_t terrain_hash_after = 0U;
+        const bool terrain_hash_after_valid =
+            sandbox3d_terrain_world_content_hash(
+                state->terrain_world, &terrain_hash_after) == HENKA_SUCCESS;
+        printf(
+            "HENKA_AUTOMATION_DIAGNOSTIC terrain_scene_reload action=reload_discard result=%d operation_result=%d failure_stage=%s dirty_regions_before=%u restored_regions=%u dirty_regions_after=%u rollback_attempted=%u rollback_succeeded=%u content_hash_before_valid=%u content_hash_before=%016llx content_hash_after_valid=%u content_hash_after=%016llx.\n",
+            (int)result,
+            (int)terrain_reload_report.operation_result,
+            terrain_reload_report.failure_stage != NULL
+                ? terrain_reload_report.failure_stage
+                : "none",
+            terrain_reload_report.dirty_region_count_before,
+            terrain_reload_report.restored_region_count,
+            terrain_reload_report.dirty_region_count_after,
+            terrain_reload_report.rollback_attempted ? 1U : 0U,
+            terrain_reload_report.rollback_succeeded ? 1U : 0U,
+            terrain_hash_before_valid ? 1U : 0U,
+            (unsigned long long)terrain_hash_before,
+            terrain_hash_after_valid ? 1U : 0U,
+            (unsigned long long)terrain_hash_after);
+        fflush(stdout);
     }
 
     if (sandbox3d_automation_input_is_owned())
@@ -31622,10 +31883,16 @@ static void sandbox3d_draw_scene_transition_modal(
         }
         else if (path_action == SANDBOX3D_SCENE_PATH_EDITOR_ACTION_SAVE)
         {
-            henka_result save_result = sandbox3d_game_authoring_save_as(
-                state->game_authoring,
-                henka_engine_get_user_data_base_path(engine),
-                state->scene_transition_save_as_editor.relative_path);
+            henka_result save_result = close_transition
+                ? sandbox3d_stop_play_for_close_save(state)
+                : HENKA_SUCCESS;
+            if (save_result == HENKA_SUCCESS)
+            {
+                save_result = sandbox3d_game_authoring_save_as(
+                    state->game_authoring,
+                    henka_engine_get_user_data_base_path(engine),
+                    state->scene_transition_save_as_editor.relative_path);
+            }
             if (save_result == HENKA_SUCCESS)
             {
                 state->scene_transition_save_as_active = false;
@@ -31726,7 +31993,22 @@ static void sandbox3d_draw_scene_transition_modal(
                     transition_name);
                 fflush(stdout);
             }
-            save_result = sandbox3d_save_scene_before_transition(engine, state);
+            save_result = HENKA_SUCCESS;
+            if (close_transition)
+            {
+                const char* relative_path =
+                    sandbox3d_game_authoring_get_relative_path(
+                        state->game_authoring);
+                if (relative_path != NULL && relative_path[0] != '\0')
+                {
+                    save_result = sandbox3d_stop_play_for_close_save(state);
+                }
+            }
+            if (save_result == HENKA_SUCCESS)
+            {
+                save_result = sandbox3d_save_scene_before_transition(
+                    engine, state);
+            }
             if (save_result == HENKA_SUCCESS &&
                 !state->scene_transition_save_as_active)
             {
@@ -31850,11 +32132,13 @@ static void sandbox3d_draw_game_authoring_scene_controls(
             return;
         }
         if (sandbox3d_automation_input_is_owned() &&
-            sandbox3d_ui_geometry_report_changed(
+            sandbox3d_ui_geometry_report_changed_with_signature(
                 &state->game_authoring_scene_actions_report,
                 HENKA_INVALID_ENTITY,
                 actions_layout->path_field,
-                (int)state->scene_path_editor.mode))
+                (int)state->scene_path_editor.mode,
+                sandbox3d_ui_state_signature_hash_text(
+                    state->scene_path_editor.relative_path)))
         {
             printf(
                 "HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls visible=1 mode=%s path_rect=%.1f,%.1f,%.1f,%.1f confirm_rect=%.1f,%.1f,%.1f,%.1f cancel_rect=%.1f,%.1f,%.1f,%.1f relative_path_empty=%u.\n",
@@ -31976,23 +32260,43 @@ static void sandbox3d_draw_game_authoring_scene_controls(
                 actions_layout->save_as_button;
             const henka_ui_rect reload_bounds =
                 actions_layout->reload_scene_button;
+            const henka_entity selected_entity =
+                sandbox3d_get_real_selected_entity(state);
+            const char* scene_relative_path =
+                sandbox3d_game_authoring_get_relative_path(
+                    state->game_authoring);
+            const size_t document_object_count =
+                sandbox3d_game_authoring_get_object_count(
+                    state->game_authoring);
+            uint64_t action_state_signature =
+                UINT64_C(14695981039346656037);
+
+            action_state_signature = sandbox3d_ui_state_signature_append(
+                action_state_signature,
+                (uint64_t)document_object_count);
+            action_state_signature = sandbox3d_ui_state_signature_append(
+                action_state_signature,
+                (uint64_t)selected_entity);
+            action_state_signature = sandbox3d_ui_state_signature_append(
+                action_state_signature,
+                sandbox3d_ui_state_signature_hash_text(scene_relative_path));
+            /* The rectangle is often stable while these authoritative
+             * values change (for example, typing into Save As or selecting
+             * another document object). Refresh the bounded automation
+             * observation on state changes without logging every frame. */
             if (sandbox3d_automation_input_is_owned() &&
-                sandbox3d_ui_geometry_report_changed(
+                sandbox3d_ui_geometry_report_changed_with_signature(
                     &state->game_authoring_scene_actions_report,
-                    sandbox3d_get_real_selected_entity(state),
+                    selected_entity,
                     save_as_bounds,
-                    1))
+                    1,
+                    action_state_signature))
             {
-                const char* relative_path =
-                    sandbox3d_game_authoring_get_relative_path(
-                        state->game_authoring);
                 printf(
                     "HENKA_AUTOMATION_DIAGNOSTIC scene_document_action_controls visible=1 document_object_count=%zu selection_present=%u relative_path_empty=%u save_rect=%.1f,%.1f,%.1f,%.1f save_as_rect=%.1f,%.1f,%.1f,%.1f reload_rect=%.1f,%.1f,%.1f,%.1f new_scene_rect=%.1f,%.1f,%.1f,%.1f open_scene_rect=%.1f,%.1f,%.1f,%.1f.\n",
-                    sandbox3d_game_authoring_get_object_count(
-                        state->game_authoring),
-                    sandbox3d_get_real_selected_entity(state) !=
-                            HENKA_INVALID_ENTITY ? 1U : 0U,
-                    relative_path != NULL && relative_path[0] == '\0'
+                    document_object_count,
+                    selected_entity != HENKA_INVALID_ENTITY ? 1U : 0U,
+                    scene_relative_path != NULL && scene_relative_path[0] == '\0'
                         ? 1U
                         : 0U,
                     save_bounds.x,
@@ -39447,6 +39751,11 @@ details_group_physics:
             {
                 const float gap = 6.0f;
                 const float button_width = (row.width - gap) * 0.5f;
+                const henka_ui_rect trigger_bounds =
+                    {row.x, row.y, button_width, row.height};
+                const henka_ui_rect play_bounds =
+                    {row.x + button_width + gap, row.y,
+                     button_width, row.height};
                 const sandbox3d_play_session_state play_state =
                     sandbox3d_game_authoring_get_play_state(state->game_authoring);
                 const char* play_label = play_state == SANDBOX3D_PLAY_SESSION_RUNNING
@@ -39473,11 +39782,27 @@ details_group_physics:
                         button_width,
                         (int)play_state);
                     fflush(stdout);
+                    if (sandbox3d_automation_input_is_owned())
+                    {
+                        printf(
+                            "HENKA_AUTOMATION_DIAGNOSTIC game_authoring_play_controls available=1 entity_id=%llu play_state=%d trigger_rect=%.1f,%.1f,%.1f,%.1f play_rect=%.1f,%.1f,%.1f,%.1f.\n",
+                            (unsigned long long)entity,
+                            (int)play_state,
+                            trigger_bounds.x,
+                            trigger_bounds.y,
+                            trigger_bounds.width,
+                            trigger_bounds.height,
+                            play_bounds.x,
+                            play_bounds.y,
+                            play_bounds.width,
+                            play_bounds.height);
+                        fflush(stdout);
+                    }
                 }
                 if (henka_ui_button(
                         state->ui,
                         "game_authoring_physics_trigger",
-                        (henka_ui_rect){row.x, row.y, button_width, row.height},
+                        trigger_bounds,
                         authored_object.physics.is_trigger ? "Solid Collider" : "Trigger") &&
                     !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
                 {
@@ -39490,7 +39815,7 @@ details_group_physics:
                 if (henka_ui_button(
                         state->ui,
                         "game_authoring_play",
-                        (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
+                        play_bounds,
                         play_label))
                 {
                     henka_result play_result;

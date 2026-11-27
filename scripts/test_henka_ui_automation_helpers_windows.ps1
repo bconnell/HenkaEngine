@@ -183,6 +183,248 @@ try {
         throw 'The scene-transition parser accepted ambiguous duplicate state fields.'
     }
 
+    $reorderedTransitionDialogLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_dialog cancel_height=40 action=reload available=1 active_name=Saved Scene active_path=Projects/Scene One.hscene selected_entity=0 object_count=1 content_height=720 content_width=1280 terrain_dirty_regions=2 terrain_dirty_query_result=0 scene_dirty_query_result=0 scene_dirty=0 save_x=10 save_y=20 save_width=90 save_height=40 discard_x=110 discard_y=20 discard_width=90 discard_height=40 cancel_x=210 cancel_y=20 cancel_width=90.'
+    $reorderedTransitionDialog = ConvertFrom-HenkaSceneTransitionControlsLine `
+        -Line $reorderedTransitionDialogLine `
+        -EventName 'scene_transition_dialog' `
+        -Action 'reload'
+    if ($null -eq $reorderedTransitionDialog -or
+        $reorderedTransitionDialog.action -ne 'reload' -or
+        $reorderedTransitionDialog.active_name -ne 'Saved Scene' -or
+        $reorderedTransitionDialog.active_path -ne 'Projects/Scene One.hscene' -or
+        $reorderedTransitionDialog.terrain_dirty_regions -ne '2') {
+        throw 'Reordered scene-transition control telemetry did not preserve its structured state.'
+    }
+    $reorderedTransitionDialogMatch = ConvertTo-HenkaAutomationRegexResult `
+        -Fields $reorderedTransitionDialog `
+        -Line $reorderedTransitionDialogLine
+    if ($reorderedTransitionDialogMatch.Groups['cancel_x'].Value -ne '210' -or
+        $reorderedTransitionDialogMatch.Groups['active_name'].Value -ne 'Saved Scene') {
+        throw 'The structured control parser did not preserve the existing geometry-consumer interface.'
+    }
+    $packagedAuthoringWorkflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'test_editor_native_authoring_windows.ps1') -Raw
+    if (-not $packagedAuthoringWorkflow.Contains('$newSceneConfirmation.Groups[''scene_dirty_query_result''].Value') -or
+        -not $packagedAuthoringWorkflow.Contains('$newSceneConfirmation.Groups[''terrain_dirty_query_result''].Value') -or
+        $packagedAuthoringWorkflow.Contains('$newSceneConfirmation.Groups[''dirty_result''].Value') -or
+        $packagedAuthoringWorkflow.Contains('$newSceneConfirmation.Groups[''terrain_dirty_result''].Value')) {
+        throw 'The packaged New Scene workflow does not consume the canonical scene-transition query-result fields.'
+    }
+    $packagedSceneOpenWorkflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'henka_packaged_scene_open_workflow.ps1') -Raw
+    if (-not $packagedSceneOpenWorkflow.Contains("`$confirmation.Groups['scene_dirty_query_result'].Value") -or
+        -not $packagedSceneOpenWorkflow.Contains("`$confirmation.Groups['terrain_dirty_query_result'].Value") -or
+        $packagedSceneOpenWorkflow.Contains("`$confirmation.Groups['dirty_result'].Value") -or
+        $packagedSceneOpenWorkflow.Contains("`$confirmation.Groups['terrain_dirty_result'].Value")) {
+        throw 'The packaged Open Scene workflow does not consume the canonical scene-transition query-result fields.'
+    }
+    if ($null -ne (ConvertFrom-HenkaSceneTransitionControlsLine `
+            -Line ($reorderedTransitionDialogLine -replace 'scene_dirty=0', 'scene_dirty=0 scene_dirty=1') `
+            -EventName 'scene_transition_dialog' `
+            -Action 'reload') -or
+        $null -ne (ConvertFrom-HenkaSceneTransitionControlsLine `
+            -Line ($reorderedTransitionDialogLine -replace ' cancel_x=210 cancel_y=20 cancel_width=90', '') `
+            -EventName 'scene_transition_dialog' `
+            -Action 'reload')) {
+        throw 'The scene-transition control parser accepted duplicate or incomplete state.'
+    }
+
+    $terrainEditLine = 'HENKA_AUTOMATION_DIAGNOSTIC terrain_edit_state dirty_regions=1 content_hash_after=0123456789abcdef world_stats_valid=1 result=0 content_hash_before_valid=1 content_hash_after_valid=1 content_hash_before=fedcba9876543210.'
+    $terrainEditState = ConvertFrom-HenkaTerrainEditStateLine -Line $terrainEditLine
+    if ($null -eq $terrainEditState -or
+        $terrainEditState.result -ne '0' -or
+        $terrainEditState.dirty_regions -ne '1' -or
+        $terrainEditState.content_hash_before -ne 'fedcba9876543210' -or
+        $terrainEditState.content_hash_after -ne '0123456789abcdef') {
+        throw 'Reordered terrain edit telemetry did not preserve content and dirty-state fields.'
+    }
+    $terrainReloadLine = 'HENKA_AUTOMATION_DIAGNOSTIC terrain_scene_reload dirty_regions_after=0 content_hash_after=1111111111111111 rollback_succeeded=0 operation_result=0 action=reload_discard content_hash_before_valid=1 result=0 failure_stage=none dirty_regions_before=1 restored_regions=1 rollback_attempted=0 content_hash_before=2222222222222222 content_hash_after_valid=1.'
+    $terrainReloadState = ConvertFrom-HenkaTerrainSceneReloadLine -Line $terrainReloadLine
+    if ($null -eq $terrainReloadState -or
+        $terrainReloadState.result -ne '0' -or
+        $terrainReloadState.dirty_regions_before -ne '1' -or
+        $terrainReloadState.restored_regions -ne '1' -or
+        $terrainReloadState.dirty_regions_after -ne '0' -or
+        $terrainReloadState.content_hash_after -ne '1111111111111111') {
+        throw 'Reordered terrain Reload telemetry did not preserve its result and content fields.'
+    }
+    if ($null -ne (ConvertFrom-HenkaTerrainEditStateLine -Line ($terrainEditLine -replace 'result=0', 'result=0 result=1')) -or
+        $null -ne (ConvertFrom-HenkaTerrainSceneReloadLine -Line ($terrainReloadLine -replace 'restored_regions=1', 'restored_regions=1 restored_regions=2'))) {
+        throw 'The terrain state parsers accepted ambiguous duplicate fields.'
+    }
+
+    $reorderedSaveAsLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_save_as cancel_height=40 action=close available=1 path_height=36 save_height=40 path_x=12 path_y=14 path_width=300 save_x=12 save_y=60 save_width=140 cancel_x=160 cancel_y=60 cancel_width=140.'
+    $reorderedSaveAs = ConvertFrom-HenkaSceneTransitionControlsLine `
+        -Line $reorderedSaveAsLine `
+        -EventName 'scene_transition_save_as' `
+        -Action 'close'
+    if ($null -eq $reorderedSaveAs -or
+        $reorderedSaveAs.path_width -ne '300' -or
+        $reorderedSaveAs.cancel_x -ne '160') {
+        throw 'Reordered Save As controls did not preserve their actual fields.'
+    }
+
+    $reorderedSceneActionsLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_action_controls open_scene_rect=810,20,70,28 visible=1 new_scene_rect=650,20,70,28 reload_rect=570,20,70,28 document_object_count=2 save_as_rect=490,20,70,28 selection_present=1 relative_path_empty=0 save_rect=410,20,70,28.'
+    $reorderedSceneActions = ConvertFrom-HenkaSceneDocumentActionControlsLine `
+        -Line $reorderedSceneActionsLine
+    if ($null -eq $reorderedSceneActions -or
+        $reorderedSceneActions.document_object_count -ne '2' -or
+        $reorderedSceneActions.selection_present -ne '1') {
+        throw 'Reordered Scene Document action controls lost their authoritative fixture state.'
+    }
+    $sceneActionsGeometry = ConvertTo-HenkaAutomationGeometryResult `
+        -Fields $reorderedSceneActions `
+        -Line $reorderedSceneActionsLine `
+        -RectangleMappings @('save_rect=save', 'open_scene_rect=open_scene')
+    if ($null -eq $sceneActionsGeometry -or
+        $sceneActionsGeometry.Groups['save_x'].Value -ne '410' -or
+        $sceneActionsGeometry.Groups['open_scene_width'].Value -ne '70') {
+        throw 'Field-based Scene Document geometry did not map the current product rectangles.'
+    }
+    if ($null -ne (ConvertFrom-HenkaSceneDocumentActionControlsLine `
+            -Line ($reorderedSceneActionsLine -replace 'visible=1', 'visible=1 visible=0')) -or
+        $null -ne (ConvertFrom-HenkaSceneDocumentActionControlsLine `
+            -Line ($reorderedSceneActionsLine -replace 'open_scene_rect=[^ ]+ ', ''))) {
+        throw 'Scene Document controls accepted duplicate or incomplete state.'
+    }
+
+    $reorderedPathControlsLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls relative_path_empty=0 cancel_rect=220,70,120,40 confirm_rect=80,70,120,40 mode=save_as path_rect=80,20,260,36 visible=1.'
+    $reorderedPathControls = ConvertFrom-HenkaScenePathEditorControlsLine `
+        -Line $reorderedPathControlsLine `
+        -Mode 'save_as'
+    $pathControlGeometry = ConvertTo-HenkaAutomationGeometryResult `
+        -Fields $reorderedPathControls `
+        -Line $reorderedPathControlsLine `
+        -RectangleMappings @('path_rect=path', 'confirm_rect=save', 'cancel_rect=cancel')
+    if ($null -eq $pathControlGeometry -or
+        $pathControlGeometry.Groups['save_x'].Value -ne '80' -or
+        $pathControlGeometry.Groups['path_height'].Value -ne '36' -or
+        $null -ne (ConvertFrom-HenkaScenePathEditorControlsLine `
+            -Line $reorderedPathControlsLine -Mode 'open')) {
+        throw 'Reordered Save As control geometry or mode authority was not enforced.'
+    }
+    $reorderedSceneNameLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_name_controls rename_rect=190,50,90,36 field_rect=20,50,160,36 available=1 label_rect=20,20,120,24.'
+    $sceneNameFields = ConvertFrom-HenkaSceneNameControlsLine -Line $reorderedSceneNameLine
+    $sceneNameGeometry = ConvertTo-HenkaAutomationGeometryResult `
+        -Fields $sceneNameFields `
+        -Line $reorderedSceneNameLine `
+        -RectangleMappings @('rename_rect=rename')
+    if ($null -eq $sceneNameGeometry -or
+        $sceneNameGeometry.Groups['rename_x'].Value -ne '190') {
+        throw 'Reordered Scene Objects name controls lost their real rename target.'
+    }
+
+    $reorderedClickInputLines = @(
+        'HENKA_AUTOMATION_DIAGNOSTIC input release_consumed=0 button=none type=move record=41',
+        'HENKA_AUTOMATION_DIAGNOSTIC input button=left release_consumed=0 type=button-down record=42',
+        'HENKA_AUTOMATION_DIAGNOSTIC input type=button-up record=43 release_consumed=1 button=left')
+    $clickConsumption = Get-HenkaAutomationClickConsumptionResult `
+        -Lines $reorderedClickInputLines
+    if ($null -eq $clickConsumption -or
+        -not $clickConsumption.Consumed -or
+        $clickConsumption.MoveRecord -ne '41' -or
+        $clickConsumption.DownRecord -ne '42' -or
+        $clickConsumption.UpRecord -ne '43') {
+        throw 'Structured input telemetry did not confirm an ordered, consumed left-click release.'
+    }
+    $unconsumedRelease = Get-HenkaAutomationClickConsumptionResult -Lines @(
+        'HENKA_AUTOMATION_DIAGNOSTIC input record=51 type=move button=none release_consumed=0',
+        'HENKA_AUTOMATION_DIAGNOSTIC input record=52 type=button-down button=left release_consumed=0',
+        'HENKA_AUTOMATION_DIAGNOSTIC input record=53 type=button-up button=left release_consumed=0')
+    $outOfOrderRelease = Get-HenkaAutomationClickConsumptionResult -Lines @(
+        'HENKA_AUTOMATION_DIAGNOSTIC input record=61 type=move button=none release_consumed=0',
+        'HENKA_AUTOMATION_DIAGNOSTIC input record=63 type=button-down button=left release_consumed=0',
+        'HENKA_AUTOMATION_DIAGNOSTIC input record=62 type=button-up button=left release_consumed=1')
+    if ($null -eq $unconsumedRelease -or $unconsumedRelease.Consumed -or
+        $null -eq $outOfOrderRelease -or $outOfOrderRelease.Consumed) {
+        throw 'The click-consumption check accepted an unconsumed or non-monotonic release.'
+    }
+    $clickLogPath = Join-Path $testDirectory 'click-consumption.log'
+    $clickLogLines = @(
+        'HENKA_AUTOMATION_DIAGNOSTIC input record=71 type=move button=none release_consumed=0',
+        'HENKA_AUTOMATION_DIAGNOSTIC input record=72 type=button-down button=left release_consumed=0',
+        'HENKA_AUTOMATION_DIAGNOSTIC input record=73 type=button-up button=left release_consumed=1')
+    [System.IO.File]::WriteAllText(
+        $clickLogPath,
+        (($clickLogLines -join [Environment]::NewLine) + [Environment]::NewLine),
+        [System.Text.Encoding]::UTF8)
+    $clickLogOffset = (Get-Item -LiteralPath $clickLogPath).Length
+    $staleClickResult = Wait-HenkaAutomationClickConsumedAfterOffset `
+        -Path $clickLogPath -StartingOffset $clickLogOffset -TimeoutMilliseconds 40
+    if ($null -eq $staleClickResult -or $staleClickResult.Consumed) {
+        throw 'The click waiter accepted a complete click that predated the current interaction offset.'
+    }
+    [System.IO.File]::AppendAllText(
+        $clickLogPath,
+        (($clickLogLines -join [Environment]::NewLine) + [Environment]::NewLine),
+        [System.Text.Encoding]::UTF8)
+    $freshClickResult = Wait-HenkaAutomationClickConsumedAfterOffset `
+        -Path $clickLogPath -StartingOffset $clickLogOffset -TimeoutMilliseconds 1000
+    if ($null -eq $freshClickResult -or
+        -not $freshClickResult.Consumed -or
+        $freshClickResult.UpRecord -ne '73') {
+        throw 'The click waiter did not accept the complete consumed click appended after the current interaction offset.'
+    }
+
+    $playControlsLine = 'HENKA_AUTOMATION_DIAGNOSTIC game_authoring_play_controls play_rect=206,80,90,26 entity_id=73 available=1 trigger_rect=110,80,90,26 play_state=0.'
+    $playControls = ConvertFrom-HenkaGameAuthoringPlayControlsLine -Line $playControlsLine
+    $playGeometry = ConvertTo-HenkaAutomationGeometryResult `
+        -Fields $playControls `
+        -Line $playControlsLine `
+        -RectangleMappings @('play_rect=play', 'trigger_rect=trigger')
+    if ($null -eq $playGeometry -or
+        $playControls.entity_id -ne '73' -or
+        $playControls.play_state -ne '0' -or
+        $playGeometry.Groups['play_x'].Value -ne '206' -or
+        $null -eq $playGeometry.Fields -or
+        $playGeometry.Fields.entity_id -ne '73' -or
+        $playGeometry.Fields.play_state -ne '0') {
+        throw 'The Game Authoring Play parser lost reordered selected-entity state or real button geometry.'
+    }
+    $closePlaySaveLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_close_play_save play_locked_after=0 result=0 play_locked_before=1.'
+    $closePlaySave = ConvertFrom-HenkaClosePlaySaveLine -Line $closePlaySaveLine
+    if ($null -eq $closePlaySave -or
+        $closePlaySave.result -ne '0' -or
+        $closePlaySave.play_locked_before -ne '1' -or
+        $closePlaySave.play_locked_after -ne '0' -or
+        $null -ne (ConvertFrom-HenkaClosePlaySaveLine `
+            -Line ($closePlaySaveLine -replace 'result=0', 'result=0 result=1'))) {
+        throw 'The close-save state parser lost lock transition fields or accepted duplicate state.'
+    }
+
+    $physicsDisclosureCommand = Get-Command `
+        -Name ConvertFrom-HenkaGameAuthoringPhysicsDisclosureLine `
+        -CommandType Function `
+        -ErrorAction SilentlyContinue
+    if ($null -eq $physicsDisclosureCommand) {
+        throw 'The Game Authoring Physics disclosure parser is missing.'
+    }
+    $physicsDisclosureLine = 'HENKA_AUTOMATION_DIAGNOSTIC game_authoring_physics_disclosure expanded=0 rect=846.0,161.9,392.0,28.0 entity_id=2097164 available=1.'
+    $physicsDisclosure = ConvertFrom-HenkaGameAuthoringPhysicsDisclosureLine `
+        -Line $physicsDisclosureLine
+    $physicsDisclosureGeometry = ConvertTo-HenkaAutomationGeometryResult `
+        -Fields $physicsDisclosure `
+        -Line $physicsDisclosureLine `
+        -RectangleMappings @('rect=disclosure')
+    if ($null -eq $physicsDisclosureGeometry -or
+        $physicsDisclosure.available -ne '1' -or
+        $physicsDisclosure.entity_id -ne '2097164' -or
+        $physicsDisclosure.expanded -ne '0' -or
+        $physicsDisclosureGeometry.Groups['disclosure_x'].Value -ne '846.0' -or
+        $physicsDisclosureGeometry.Groups['disclosure_y'].Value -ne '161.9' -or
+        $physicsDisclosureGeometry.Fields.entity_id -ne '2097164') {
+        throw 'The Physics disclosure parser lost selected-entity state or product-owned hit geometry.'
+    }
+    $physicsDisclosureReordered = ConvertFrom-HenkaGameAuthoringPhysicsDisclosureLine `
+        -Line 'HENKA_AUTOMATION_DIAGNOSTIC game_authoring_physics_disclosure rect=846.0,161.9,392.0,28.0 available=1 expanded=1 entity_id=2097164.'
+    if ($null -eq $physicsDisclosureReordered -or
+        $physicsDisclosureReordered.entity_id -ne $physicsDisclosure.entity_id -or
+        $physicsDisclosureReordered.expanded -ne '1' -or
+        $null -ne (ConvertFrom-HenkaGameAuthoringPhysicsDisclosureLine `
+            -Line ($physicsDisclosureLine -replace 'expanded=0', 'expanded=2')) -or
+        $null -ne (ConvertFrom-HenkaGameAuthoringPhysicsDisclosureLine `
+            -Line ($physicsDisclosureLine -replace 'available=1', 'available=1 available=1'))) {
+        throw 'The Physics disclosure parser accepted invalid state or rejected reordered authoritative fields.'
+    }
+
     $openAttemptLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=scene_open_attempt result=1 relative_path_empty=0 active_name=Open Draft With Spaces active_relative_path=Projects/Scene One.hscene active_document_object_count=2 selection_present=1.'
     $openAttempt = ConvertFrom-HenkaSceneOpenAttemptLine -Line $openAttemptLine
     if ($null -eq $openAttempt -or

@@ -1,3 +1,31 @@
+function Get-GameAuthoringPlayControls {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $line = Get-LastLogRegexMatch -Path $Path `
+        -Pattern '(?m)^HENKA_AUTOMATION_DIAGNOSTIC game_authoring_play_controls [^\r\n]*$'
+    if ($null -eq $line) { return $null }
+    $fields = ConvertFrom-HenkaGameAuthoringPlayControlsLine -Line $line.Value
+    if ($null -eq $fields) { return $null }
+    return ConvertTo-HenkaAutomationGeometryResult `
+        -Fields $fields `
+        -Line $line.Value `
+        -RectangleMappings @('trigger_rect=trigger', 'play_rect=play')
+}
+
+function Get-GameAuthoringPhysicsDisclosureControls {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $line = Get-LastLogRegexMatch -Path $Path `
+        -Pattern '(?m)^HENKA_AUTOMATION_DIAGNOSTIC game_authoring_physics_disclosure [^\r\n]*$'
+    if ($null -eq $line) { return $null }
+    $fields = ConvertFrom-HenkaGameAuthoringPhysicsDisclosureLine -Line $line.Value
+    if ($null -eq $fields) { return $null }
+    return ConvertTo-HenkaAutomationGeometryResult `
+        -Fields $fields `
+        -Line $line.Value `
+        -RectangleMappings @('rect=disclosure')
+}
+
 function Invoke-HenkaPackagedSceneOpenWorkflow {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][hashtable]$Context)
@@ -127,8 +155,8 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
         SelectedEntity = $confirmation.Groups['selected_entity'].Value
         SceneDirty = $confirmation.Groups['scene_dirty'].Value
         TerrainDirtyRegions = $confirmation.Groups['terrain_dirty_regions'].Value
-        DirtyQueryResult = $confirmation.Groups['dirty_result'].Value
-        TerrainDirtyQueryResult = $confirmation.Groups['terrain_dirty_result'].Value
+        DirtyQueryResult = $confirmation.Groups['scene_dirty_query_result'].Value
+        TerrainDirtyQueryResult = $confirmation.Groups['terrain_dirty_query_result'].Value
     }
     $null = Assert-HenkaStructuredState `
         -Description 'Open Scene dirty-document test precondition' `
@@ -695,6 +723,207 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
         throw "Canceling the window-close prompt still exited the packaged editor."
     }
 
+    if ($loadedCount -lt 1 -or $loadedSelection -ne '1') {
+        throw "[FIXTURE/PRECONDITION] Close Save while Play requires the already-proven opened scene with its authored Cube selected."
+    }
+    $expectedPlayEntity = [string]$closeCancelledDecision.SelectedEntity
+    if ($expectedPlayEntity -notmatch '^\d+$' -or $expectedPlayEntity -eq '0') {
+        throw "[FIXTURE/PRECONDITION] The retained scene did not report one canonical selected entity for the Play workflow."
+    }
+    $physicsDisclosurePattern = 'HENKA_AUTOMATION_DIAGNOSTIC game_authoring_physics_disclosure [^\r\n]*\.'
+    $playControlsPattern = 'HENKA_AUTOMATION_DIAGNOSTIC game_authoring_play_controls [^\r\n]*\.'
+    $playControls = $null
+    $detailsForPlay = $null
+    $playControlsFresh = $false
+    $physicsDisclosureOpened = $false
+    for ($navigation = 0; $navigation -lt 24; ++$navigation) {
+        $physicsDisclosure = Get-GameAuthoringPhysicsDisclosureControls -Path $Context.StdoutPath
+        if ($null -eq $physicsDisclosure -or $null -eq $physicsDisclosure.Fields) {
+            throw "[HARNESS/OBSERVATION] The product did not report current Physics disclosure state and geometry."
+        }
+        if ($physicsDisclosure.Fields.entity_id -ne $expectedPlayEntity) {
+            throw "[PRODUCT/STATE] Physics disclosure telemetry belongs to entity $($physicsDisclosure.Fields.entity_id), not retained selection $expectedPlayEntity."
+        }
+        if ($physicsDisclosure.Fields.expanded -eq '1') {
+            $physicsDisclosureOpened = $true
+        }
+        $detailsForPlay = Get-DetailsPanelGeometry -Path $Context.StdoutPath
+        if ($null -eq $detailsForPlay) {
+            throw "[HARNESS/OBSERVATION] Object Details geometry was unavailable while opening Physics and locating Play."
+        }
+        $detailsRect = [pscustomobject]@{
+            X = Convert-HenkaAutomationNumber $detailsForPlay.Groups['x'].Value
+            Y = Convert-HenkaAutomationNumber $detailsForPlay.Groups['y'].Value
+            Width = Convert-HenkaAutomationNumber $detailsForPlay.Groups['width'].Value
+            Height = Convert-HenkaAutomationNumber $detailsForPlay.Groups['height'].Value
+        }
+        $physicsRect = [pscustomobject]@{
+            X = Convert-HenkaAutomationNumber $physicsDisclosure.Groups['disclosure_x'].Value
+            Y = Convert-HenkaAutomationNumber $physicsDisclosure.Groups['disclosure_y'].Value
+            Width = Convert-HenkaAutomationNumber $physicsDisclosure.Groups['disclosure_width'].Value
+            Height = Convert-HenkaAutomationNumber $physicsDisclosure.Groups['disclosure_height'].Value
+        }
+        $physicsRectVisible = $physicsRect.Width -gt 0.0 -and $physicsRect.Height -gt 0.0 -and
+            $physicsRect.X -ge ($detailsRect.X - 0.5) -and
+            $physicsRect.Y -ge ($detailsRect.Y - 0.5) -and
+            ($physicsRect.X + $physicsRect.Width) -le ($detailsRect.X + $detailsRect.Width + 0.5) -and
+            ($physicsRect.Y + $physicsRect.Height) -le ($detailsRect.Y + $detailsRect.Height + 0.5)
+
+        if ($physicsDisclosure.Fields.expanded -eq '0' -and $physicsRectVisible) {
+            $physicsToggleOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+            Send-HenkaObservedAutomationClick `
+                -EventPath $Context.AutomationInputPath `
+                -StdoutPath $Context.StdoutPath `
+                -X ($physicsRect.X + ($physicsRect.Width * 0.5)) `
+                -Y ($physicsRect.Y + ($physicsRect.Height * 0.5)) `
+                -Purpose 'Game Authoring Physics disclosure' | Out-Null
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $Context.StdoutPath `
+                    -Pattern $physicsDisclosurePattern `
+                    -StartingOffset $physicsToggleOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "[HARNESS/OBSERVATION] The Physics click was consumed, but the product did not report the disclosure state transition."
+            }
+            $physicsAfterClick = Get-GameAuthoringPhysicsDisclosureControls -Path $Context.StdoutPath
+            if ($null -eq $physicsAfterClick -or
+                $physicsAfterClick.Fields.entity_id -ne $expectedPlayEntity -or
+                $physicsAfterClick.Fields.expanded -ne '1') {
+                throw "[PRODUCT/UI] The real Physics disclosure click did not expand Physics for the retained selected entity."
+            }
+            $physicsDisclosureOpened = $true
+            if (Wait-FileContainsAfterOffset `
+                    -Path $Context.StdoutPath `
+                    -Pattern $playControlsPattern `
+                    -StartingOffset $physicsToggleOffset `
+                    -TimeoutMilliseconds 250) {
+                $playControlsFresh = $true
+            }
+            Write-Output "[pass] Expanded Physics for selected entity $expectedPlayEntity through its current product hit rectangle."
+            continue
+        }
+
+        $playControls = Get-GameAuthoringPlayControls -Path $Context.StdoutPath
+        if ($playControlsFresh -and $null -ne $playControls -and $null -ne $playControls.Fields) {
+            if ($playControls.Fields.entity_id -ne $expectedPlayEntity -or
+                $playControls.Fields.play_state -ne '0') {
+                throw "[PRODUCT/STATE] The visible Play controls did not report the retained selected entity in the stopped state."
+            }
+            $playRect = [pscustomobject]@{
+                X = Convert-HenkaAutomationNumber $playControls.Groups['play_x'].Value
+                Y = Convert-HenkaAutomationNumber $playControls.Groups['play_y'].Value
+                Width = Convert-HenkaAutomationNumber $playControls.Groups['play_width'].Value
+                Height = Convert-HenkaAutomationNumber $playControls.Groups['play_height'].Value
+            }
+            $playRectVisible = $playRect.Width -gt 0.0 -and $playRect.Height -gt 0.0 -and
+                $playRect.X -ge ($detailsRect.X - 0.5) -and
+                $playRect.Y -ge ($detailsRect.Y - 0.5) -and
+                ($playRect.X + $playRect.Width) -le ($detailsRect.X + $detailsRect.Width + 0.5) -and
+                ($playRect.Y + $playRect.Height) -le ($detailsRect.Y + $detailsRect.Height + 0.5)
+            if ($playRectVisible) {
+                break
+            }
+        }
+
+        $scrollOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+        $detailsForPlayScrollX = $detailsRect.X + ($detailsRect.Width * 0.5)
+        $detailsForPlayScrollY = $detailsRect.Y + ($detailsRect.Height * 0.5)
+        Send-HenkaAutomationScroll `
+            -EventPath $Context.AutomationInputPath `
+            -X $detailsForPlayScrollX `
+            -Y $detailsForPlayScrollY `
+            -WheelDelta -1.0
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $Context.StdoutPath `
+                -Pattern $detailsScrollPattern `
+                -StartingOffset $scrollOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "[HARNESS/OBSERVATION] The product did not report consumption and result of the bounded Details scroll."
+        }
+        $scrollReport = Get-LastLogRegexMatch `
+            -Path $Context.StdoutPath `
+            -Pattern $detailsScrollPattern
+        if ($null -eq $scrollReport -or $scrollReport.Groups['handled'].Value -ne '1') {
+            throw "[PRODUCT/UI] Object Details did not own the scroll input needed to reach Physics or Play."
+        }
+        $scrollBefore = Convert-HenkaAutomationNumber $scrollReport.Groups['before'].Value
+        $scrollAfter = Convert-HenkaAutomationNumber $scrollReport.Groups['after'].Value
+        if ($scrollAfter -le $scrollBefore) {
+            throw "[PRODUCT/UI] Object Details reached scroll offset $scrollAfter without progress toward the Physics disclosure or Play controls."
+        }
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $Context.StdoutPath `
+                -Pattern $physicsDisclosurePattern `
+                -StartingOffset $scrollOffset `
+                -TimeoutMilliseconds 3000)) {
+            throw "[HARNESS/OBSERVATION] The Details scroll progressed, but the product did not refresh Physics disclosure geometry."
+        }
+        if (Wait-FileContainsAfterOffset `
+                -Path $Context.StdoutPath `
+                -Pattern $playControlsPattern `
+                -StartingOffset $scrollOffset `
+                -TimeoutMilliseconds 250) {
+            $playControlsFresh = $true
+        }
+    }
+    if ($null -eq $playControls -or -not $playControlsFresh -or -not $physicsDisclosureOpened) {
+        $physicsState = if ($null -eq $physicsDisclosure) { 'unreported' } else { $physicsDisclosure.Fields.expanded }
+        throw "[PRODUCT/UI] Bounded product navigation did not expose fresh Play controls for entity $expectedPlayEntity (Physics expanded=$physicsState)."
+    }
+    $detailsForPlay = Get-DetailsPanelGeometry -Path $Context.StdoutPath
+    if ($null -eq $detailsForPlay) {
+        throw "[HARNESS/OBSERVATION] Current Object Details geometry was unavailable immediately before starting Play."
+    }
+    $playControls = Get-GameAuthoringPlayControls -Path $Context.StdoutPath
+    if ($null -eq $playControls -or $null -eq $playControls.Fields) {
+        throw "[HARNESS/OBSERVATION] Fresh Play control state and geometry were unavailable immediately before interaction."
+    }
+    if ($playControls.Fields.entity_id -notmatch '^\d+$' -or
+        $playControls.Fields.play_state -ne '0') {
+        throw "[PRODUCT/STATE] The selected authored object's Play state changed before the packaged interaction."
+    }
+    $playRect = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $playControls.Groups['play_x'].Value
+        Y = Convert-HenkaAutomationNumber $playControls.Groups['play_y'].Value
+        Width = Convert-HenkaAutomationNumber $playControls.Groups['play_width'].Value
+        Height = Convert-HenkaAutomationNumber $playControls.Groups['play_height'].Value
+    }
+    $detailsRect = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $detailsForPlay.Groups['x'].Value
+        Y = Convert-HenkaAutomationNumber $detailsForPlay.Groups['y'].Value
+        Width = Convert-HenkaAutomationNumber $detailsForPlay.Groups['width'].Value
+        Height = Convert-HenkaAutomationNumber $detailsForPlay.Groups['height'].Value
+    }
+    if ($playRect.Width -le 0.0 -or $playRect.Height -le 0.0 -or
+        $playRect.X -lt ($detailsRect.X - 0.5) -or
+        $playRect.Y -lt ($detailsRect.Y - 0.5) -or
+        ($playRect.X + $playRect.Width) -gt ($detailsRect.X + $detailsRect.Width + 0.5) -or
+        ($playRect.Y + $playRect.Height) -gt ($detailsRect.Y + $detailsRect.Height + 0.5)) {
+        throw "[PRODUCT/UI] The selected object's Play hit target was not wholly inside visible Object Details."
+    }
+    $playStartOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+    Send-HenkaObservedAutomationClick `
+        -EventPath $Context.AutomationInputPath `
+        -StdoutPath $Context.StdoutPath `
+        -X ($playRect.X + ($playRect.Width * 0.5)) `
+        -Y ($playRect.Y + ($playRect.Height * 0.5)) `
+        -Purpose 'Game Authoring Start Play' | Out-Null
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $Context.StdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC game_authoring_play_controls [^\r\n]*\.' `
+            -StartingOffset $playStartOffset `
+            -TimeoutMilliseconds 10000)) {
+        throw "[HARNESS/OBSERVATION] The real Play click was consumed, but no post-action Play-state report was emitted; control activation and product reporting cannot be distinguished."
+    }
+    $runningPlayControls = Get-GameAuthoringPlayControls -Path $Context.StdoutPath
+    if ($null -eq $runningPlayControls -or $null -eq $runningPlayControls.Fields) {
+        throw "[HARNESS/OBSERVATION] The post-action Play report arrived but could not be parsed into structured state."
+    }
+    if ($runningPlayControls.Fields.entity_id -ne $playControls.Fields.entity_id -or
+        $runningPlayControls.Fields.play_state -ne '1') {
+        throw "[PRODUCT/STATE] The real Play control did not start the same selected authored entity."
+    }
+    Write-Output "[pass] Started Play for selected entity $($runningPlayControls.Fields.entity_id) through the real Object Details button."
+
     $saveCloseOffset = Get-FileLengthSafe -Path $Context.StdoutPath
     if (-not $Context.Process.CloseMainWindow()) {
         throw "The second normal window-close request was not delivered."
@@ -704,8 +933,10 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
     }
     $saveCloseDialog = Get-SceneTransitionDialogControls -Path $Context.StdoutPath -Action 'close'
     if ($null -eq $saveCloseDialog) {
-        throw "The close prompt did not expose its real Save control after cancellation."
+        throw "[HARNESS/OBSERVATION] The close prompt did not expose parseable current Save geometry after cancellation."
     }
+    $saveCloseContentWidth = [int]$saveCloseDialog.Groups['content_width'].Value
+    $saveCloseContentHeight = [int]$saveCloseDialog.Groups['content_height'].Value
     $closeSave = [pscustomobject]@{
         X = Convert-HenkaAutomationNumber $saveCloseDialog.Groups['save_x'].Value
         Y = Convert-HenkaAutomationNumber $saveCloseDialog.Groups['save_y'].Value
@@ -714,29 +945,57 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
     }
     if ($closeSave.Width -le 0.0 -or $closeSave.Height -le 0.0 -or
         $closeSave.X -lt -0.5 -or $closeSave.Y -lt -0.5 -or
-        ($closeSave.X + $closeSave.Width) -gt ($closeContentWidth + 0.5) -or
-        ($closeSave.Y + $closeSave.Height) -gt ($closeContentHeight + 0.5)) {
+        ($closeSave.X + $closeSave.Width) -gt ($saveCloseContentWidth + 0.5) -or
+        ($closeSave.Y + $closeSave.Height) -gt ($saveCloseContentHeight + 0.5)) {
         throw "The close dialog Save target escaped the visible application content."
     }
     $closeSaveDecisionOffset = Get-FileLengthSafe -Path $Context.StdoutPath
-    Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($closeSave.X + ($closeSave.Width * 0.5)) -Y ($closeSave.Y + ($closeSave.Height * 0.5))
+    Send-HenkaObservedAutomationClick `
+        -EventPath $Context.AutomationInputPath `
+        -StdoutPath $Context.StdoutPath `
+        -X ($closeSave.X + ($closeSave.Width * 0.5)) `
+        -Y ($closeSave.Y + ($closeSave.Height * 0.5)) `
+        -Purpose 'Close Save while Play is active' | Out-Null
+    $closePlaySavePattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_close_play_save [^\r\n]*\.'
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $Context.StdoutPath `
+            -Pattern $closePlaySavePattern `
+            -StartingOffset $closeSaveDecisionOffset `
+            -TimeoutMilliseconds 10000)) {
+        throw "[HARNESS/OBSERVATION] The consumed Close Save click produced no Play-lock report, so the save/stop result cannot be classified."
+    }
+    $closePlaySaveLine = Get-LastLogRegexMatch -Path $Context.StdoutPath -Pattern $closePlaySavePattern
+    if ($null -eq $closePlaySaveLine) {
+        throw "[HARNESS/OBSERVATION] The Close Save state report disappeared after its readiness check."
+    }
+    $closePlaySave = ConvertFrom-HenkaClosePlaySaveLine -Line $closePlaySaveLine.Value
+    if ($null -eq $closePlaySave) {
+        throw "[HARNESS/OBSERVATION] The emitted Close Save Play-lock report could not be parsed into structured state."
+    }
+    if ([int]$closePlaySave.result -ne 0 -or
+        $closePlaySave.play_locked_before -ne '1' -or
+        $closePlaySave.play_locked_after -ne '0') {
+        throw "[PRODUCT/STATE] Close Save did not stop Play before committing the save (result=$($closePlaySave.result), before=$($closePlaySave.play_locked_before), after=$($closePlaySave.play_locked_after))."
+    }
     $terrainSave = Get-HenkaSceneTransitionTerrainSaveAfterOffset -Path $Context.StdoutPath -StartingOffset $closeSaveDecisionOffset -TimeoutMilliseconds 15000
-    if ($null -eq $terrainSave -or
-        $terrainSave.Result -ne '0' -or
+    if ($null -eq $terrainSave) {
+        throw "[HARNESS/OBSERVATION] Close Save emitted no parseable Terrain persistence report."
+    }
+    if ($terrainSave.Result -ne '0' -or
         $terrainSave.DirtyBefore -ne '0' -or
         $terrainSave.Saved -ne '0' -or
         $terrainSave.DirtyAfter -ne '0') {
-        throw "Saving before close did not report the expected clean terrain persistence state."
+        throw "[PRODUCT/STATE] Saving before close did not report the expected clean terrain persistence state."
     }
     $closedResult = Get-HenkaSceneTransitionResultAfterOffset -Path $Context.StdoutPath -Action 'close' -StartingOffset $closeSaveDecisionOffset -TimeoutMilliseconds 15000
-    if ($null -eq $closedResult -or
-        $closedResult.Result -ne '0' -or
+    if ($null -eq $closedResult) {
+        throw "[HARNESS/OBSERVATION] Close Save emitted no parseable completed scene-close report."
+    }
+    if ($closedResult.Result -ne '0' -or
         $closedResult.ActiveName -ne $closeDraftName -or
         $closedResult.ActivePath -ne $openRelativePath -or
-        [int]$closedResult.ObjectCount -ne $loadedCount -or
-        (($loadedSelection -eq '1') -and $closedResult.SelectedEntity -eq '0') -or
-        (($loadedSelection -eq '0') -and $closedResult.SelectedEntity -ne '0')) {
-        throw "Saving before close did not complete the normal editor-close transition."
+        [int]$closedResult.ObjectCount -ne $loadedCount) {
+        throw "[PRODUCT/STATE] Saving before close did not complete the normal editor-close transition."
     }
     if (-not $Context.Process.WaitForExit(15000) -or $Context.Process.ExitCode -ne 0) {
         throw "The packaged editor did not exit successfully after its saved close transition."

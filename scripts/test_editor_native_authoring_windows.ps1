@@ -61,9 +61,13 @@ function Get-SceneObjectsGeometry {
 function Get-SceneNameControls {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    return Get-LastLogRegexMatch `
-        -Path $Path `
-        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_name_controls available=1 label_rect=(?<label_x>[-0-9.]+),(?<label_y>[-0-9.]+),(?<label_width>[-0-9.]+),(?<label_height>[-0-9.]+) field_rect=(?<field_x>[-0-9.]+),(?<field_y>[-0-9.]+),(?<field_width>[-0-9.]+),(?<field_height>[-0-9.]+) rename_rect=(?<rename_x>[-0-9.]+),(?<rename_y>[-0-9.]+),(?<rename_width>[-0-9.]+),(?<rename_height>[-0-9.]+)\.'
+    $line = Get-LastLogRegexMatch -Path $Path `
+        -Pattern '(?m)^HENKA_AUTOMATION_DIAGNOSTIC scene_name_controls [^\r\n]*$'
+    if ($null -eq $line) { return $null }
+    $fields = ConvertFrom-HenkaSceneNameControlsLine -Line $line.Value
+    if ($null -eq $fields) { return $null }
+    return ConvertTo-HenkaAutomationGeometryResult -Fields $fields -Line $line.Value `
+        -RectangleMappings @('label_rect=label', 'field_rect=field', 'rename_rect=rename')
 }
 
 function Get-DetailsPanelGeometry {
@@ -77,23 +81,39 @@ function Get-DetailsPanelGeometry {
 function Get-SceneDocumentActionControls {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    return Get-LastLogRegexMatch `
-        -Path $Path `
-        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_action_controls visible=1 document_object_count=(?<document_object_count>\d+) selection_present=(?<selection_present>[01]) relative_path_empty=(?<relative_path_empty>[01]) save_rect=(?<save_x>[-0-9.]+),(?<save_y>[-0-9.]+),(?<save_width>[-0-9.]+),(?<save_height>[-0-9.]+) save_as_rect=(?<save_as_x>[-0-9.]+),(?<save_as_y>[-0-9.]+),(?<save_as_width>[-0-9.]+),(?<save_as_height>[-0-9.]+) reload_rect=(?<reload_x>[-0-9.]+),(?<reload_y>[-0-9.]+),(?<reload_width>[-0-9.]+),(?<reload_height>[-0-9.]+) new_scene_rect=(?<new_scene_x>[-0-9.]+),(?<new_scene_y>[-0-9.]+),(?<new_scene_width>[-0-9.]+),(?<new_scene_height>[-0-9.]+) open_scene_rect=(?<open_scene_x>[-0-9.]+),(?<open_scene_y>[-0-9.]+),(?<open_scene_width>[-0-9.]+),(?<open_scene_height>[-0-9.]+)\.'
+    $line = Get-LastLogRegexMatch -Path $Path `
+        -Pattern '(?m)^HENKA_AUTOMATION_DIAGNOSTIC scene_document_action_controls [^\r\n]*$'
+    if ($null -eq $line) { return $null }
+    $fields = ConvertFrom-HenkaSceneDocumentActionControlsLine -Line $line.Value
+    if ($null -eq $fields) { return $null }
+    return ConvertTo-HenkaAutomationGeometryResult -Fields $fields -Line $line.Value `
+        -RectangleMappings @(
+            'save_rect=save', 'save_as_rect=save_as', 'reload_rect=reload',
+            'new_scene_rect=new_scene', 'open_scene_rect=open_scene')
 }
 
 function Get-SceneSaveAsControls {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    return Get-LastLogRegexMatch `
-        -Path $Path `
-        -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls visible=1 mode=save_as path_rect=(?<path_x>[-0-9.]+),(?<path_y>[-0-9.]+),(?<path_width>[-0-9.]+),(?<path_height>[-0-9.]+) confirm_rect=(?<save_x>[-0-9.]+),(?<save_y>[-0-9.]+),(?<save_width>[-0-9.]+),(?<save_height>[-0-9.]+) cancel_rect=(?<cancel_x>[-0-9.]+),(?<cancel_y>[-0-9.]+),(?<cancel_width>[-0-9.]+),(?<cancel_height>[-0-9.]+) relative_path_empty=(?<relative_path_empty>[01])\.'
+    $line = Get-LastLogRegexMatch -Path $Path `
+        -Pattern '(?m)^HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls [^\r\n]*$'
+    if ($null -eq $line) { return $null }
+    $fields = ConvertFrom-HenkaScenePathEditorControlsLine -Line $line.Value -Mode 'save_as'
+    if ($null -eq $fields) { return $null }
+    return ConvertTo-HenkaAutomationGeometryResult -Fields $fields -Line $line.Value `
+        -RectangleMappings @('path_rect=path', 'confirm_rect=save', 'cancel_rect=cancel')
 }
 
 function Get-SceneOpenControls {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    return Get-LastLogRegexMatch -Path $Path -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls visible=1 mode=open path_rect=(?<path_x>[-0-9.]+),(?<path_y>[-0-9.]+),(?<path_width>[-0-9.]+),(?<path_height>[-0-9.]+) confirm_rect=(?<open_x>[-0-9.]+),(?<open_y>[-0-9.]+),(?<open_width>[-0-9.]+),(?<open_height>[-0-9.]+) cancel_rect=(?<cancel_x>[-0-9.]+),(?<cancel_y>[-0-9.]+),(?<cancel_width>[-0-9.]+),(?<cancel_height>[-0-9.]+) relative_path_empty=(?<relative_path_empty>[01])\.'
+    $line = Get-LastLogRegexMatch -Path $Path `
+        -Pattern '(?m)^HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls [^\r\n]*$'
+    if ($null -eq $line) { return $null }
+    $fields = ConvertFrom-HenkaScenePathEditorControlsLine -Line $line.Value -Mode 'open'
+    if ($null -eq $fields) { return $null }
+    return ConvertTo-HenkaAutomationGeometryResult -Fields $fields -Line $line.Value `
+        -RectangleMappings @('path_rect=path', 'confirm_rect=open', 'cancel_rect=cancel')
 }
 
 function Save-HenkaProductFramebufferScreenshot {
@@ -143,12 +163,16 @@ function Get-SceneTransitionDialogControls {
         [Parameter(Mandatory = $true)][ValidateSet("new", "reload", "open", "close")][string]$Action
     )
 
-    $pattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_dialog available=1 action=' +
-        [Regex]::Escape($Action) +
-        ' scene_dirty=(?<scene_dirty>[01]) scene_dirty_query_result=(?<dirty_result>-?\d+) terrain_dirty_query_result=(?<terrain_dirty_result>-?\d+) terrain_dirty_regions=(?<terrain_dirty_regions>\d+) content_width=(?<content_width>\d+) content_height=(?<content_height>\d+) active_name=(?<active_name>.*?) active_path=(?<active_path>.*?) object_count=(?<object_count>\d+) selected_entity=(?<selected_entity>\d+) save_x=(?<save_x>[-0-9.]+) save_y=(?<save_y>[-0-9.]+) save_width=(?<save_width>[-0-9.]+) save_height=(?<save_height>[-0-9.]+) discard_x=(?<discard_x>[-0-9.]+) discard_y=(?<discard_y>[-0-9.]+) discard_width=(?<discard_width>[-0-9.]+) discard_height=(?<discard_height>[-0-9.]+) cancel_x=(?<cancel_x>[-0-9.]+) cancel_y=(?<cancel_y>[-0-9.]+) cancel_width=(?<cancel_width>[-0-9.]+) cancel_height=(?<cancel_height>[-0-9.]+)\.'
-    return Get-LastLogRegexMatch `
-        -Path $Path `
-        -Pattern $pattern
+    $pattern = '(?m)^HENKA_AUTOMATION_DIAGNOSTIC scene_transition_dialog (?=[^\r\n]*(?:^|\s)action=' +
+        [Regex]::Escape($Action) + '(?:\s|\.))[^\r\n]*$'
+    $line = Get-LastLogRegexMatch -Path $Path -Pattern $pattern
+    if ($null -eq $line) { return $null }
+    $fields = ConvertFrom-HenkaSceneTransitionControlsLine `
+        -Line $line.Value `
+        -EventName 'scene_transition_dialog' `
+        -Action $Action
+    if ($null -eq $fields) { return $null }
+    return ConvertTo-HenkaAutomationRegexResult -Fields $fields -Line $line.Value
 }
 
 function Get-SceneTransitionSaveAsControls {
@@ -157,10 +181,16 @@ function Get-SceneTransitionSaveAsControls {
         [Parameter(Mandatory = $true)][ValidateSet("new", "reload", "open", "close")][string]$Action
     )
 
-    $pattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_save_as available=1 action=' +
-        [Regex]::Escape($Action) +
-        ' path_x=(?<path_x>[-0-9.]+) path_y=(?<path_y>[-0-9.]+) path_width=(?<path_width>[-0-9.]+) path_height=(?<path_height>[-0-9.]+) save_x=(?<save_x>[-0-9.]+) save_y=(?<save_y>[-0-9.]+) save_width=(?<save_width>[-0-9.]+) save_height=(?<save_height>[-0-9.]+) cancel_x=(?<cancel_x>[-0-9.]+) cancel_y=(?<cancel_y>[-0-9.]+) cancel_width=(?<cancel_width>[-0-9.]+) cancel_height=(?<cancel_height>[-0-9.]+)\.'
-    return Get-LastLogRegexMatch -Path $Path -Pattern $pattern
+    $pattern = '(?m)^HENKA_AUTOMATION_DIAGNOSTIC scene_transition_save_as (?=[^\r\n]*(?:^|\s)action=' +
+        [Regex]::Escape($Action) + '(?:\s|\.))[^\r\n]*$'
+    $line = Get-LastLogRegexMatch -Path $Path -Pattern $pattern
+    if ($null -eq $line) { return $null }
+    $fields = ConvertFrom-HenkaSceneTransitionControlsLine `
+        -Line $line.Value `
+        -EventName 'scene_transition_save_as' `
+        -Action $Action
+    if ($null -eq $fields) { return $null }
+    return ConvertTo-HenkaAutomationRegexResult -Fields $fields -Line $line.Value
 }
 
 function Get-SceneTransitionSaveAsBounds {
@@ -169,10 +199,16 @@ function Get-SceneTransitionSaveAsBounds {
         [Parameter(Mandatory = $true)][ValidateSet("new", "reload", "open", "close")][string]$Action
     )
 
-    $pattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_save_as_bounds available=1 action=' +
-        [Regex]::Escape($Action) +
-        ' content_width=(?<content_width>\d+) content_height=(?<content_height>\d+)\.'
-    return Get-LastLogRegexMatch -Path $Path -Pattern $pattern
+    $pattern = '(?m)^HENKA_AUTOMATION_DIAGNOSTIC scene_transition_save_as_bounds (?=[^\r\n]*(?:^|\s)action=' +
+        [Regex]::Escape($Action) + '(?:\s|\.))[^\r\n]*$'
+    $line = Get-LastLogRegexMatch -Path $Path -Pattern $pattern
+    if ($null -eq $line) { return $null }
+    $fields = ConvertFrom-HenkaSceneTransitionControlsLine `
+        -Line $line.Value `
+        -EventName 'scene_transition_save_as_bounds' `
+        -Action $Action
+    if ($null -eq $fields) { return $null }
+    return ConvertTo-HenkaAutomationRegexResult -Fields $fields -Line $line.Value
 }
 
 function Get-SceneObjectsControl {
@@ -256,6 +292,32 @@ function Send-HenkaAutomationClickAt {
     )
 
     Send-HenkaAutomationClick -EventPath $EventPath -X $X -Y $Y
+}
+
+function Send-HenkaObservedAutomationClick {
+    param(
+        [Parameter(Mandatory = $true)][string]$EventPath,
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y,
+        [Parameter(Mandatory = $true)][string]$Purpose
+    )
+
+    $startingOffset = Get-FileLengthSafe -Path $StdoutPath
+    Send-HenkaAutomationClickAt -EventPath $EventPath -X $X -Y $Y
+    $consumption = Wait-HenkaAutomationClickConsumedAfterOffset `
+        -Path $StdoutPath `
+        -StartingOffset $startingOffset `
+        -TimeoutMilliseconds 5000
+    if ($null -eq $consumption -or -not $consumption.Consumed) {
+        $reason = if ($null -eq $consumption) {
+            'no structured input result'
+        } else {
+            $consumption.Reason
+        }
+        throw "[HARNESS/INPUT] $Purpose was not proven as a consumed move/down/up click: $reason."
+    }
+    return $consumption
 }
 
 function Clear-HenkaTextField {
@@ -972,10 +1034,12 @@ try {
     $terrainHitY = Convert-HenkaAutomationNumber $terrainHit.Groups['y'].Value
     Write-Output ("[pass] Product Terrain ray authority reported resident ground at {0:F1},{1:F1}." -f $terrainHitX, $terrainHitY)
     $terrainEditOffset = Get-FileLengthSafe -Path $stdoutPath
-    Send-HenkaAutomationClickAt `
+    Send-HenkaObservedAutomationClick `
         -EventPath $automationInputPath `
+        -StdoutPath $stdoutPath `
         -X $terrainHitX `
-        -Y $terrainHitY
+        -Y $terrainHitY `
+        -Purpose 'initial Terrain brush click' | Out-Null
     if (-not (Wait-FileContainsAfterOffset `
             -Path $stdoutPath `
             -Pattern 'Terrain raise committed through the shared command API\.' `
@@ -983,6 +1047,26 @@ try {
             -TimeoutMilliseconds 10000)) {
         throw "A real Terrain viewport click did not commit a terrain edit before New Scene."
     }
+    $terrainEditStatePattern = 'HENKA_AUTOMATION_DIAGNOSTIC terrain_edit_state [^\r\n]*\.'
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern $terrainEditStatePattern `
+            -StartingOffset $terrainEditOffset `
+            -TimeoutMilliseconds 10000)) {
+        throw "The product did not publish structured Terrain edit state after the real brush click."
+    }
+    $terrainEditState = ConvertFrom-HenkaTerrainEditStateLine `
+        -Line (Get-LastLogRegexMatch -Path $stdoutPath -Pattern $terrainEditStatePattern).Value
+    if ($null -eq $terrainEditState -or
+        [int]$terrainEditState.result -ne 0 -or
+        [int]$terrainEditState.content_hash_before_valid -ne 1 -or
+        [int]$terrainEditState.content_hash_after_valid -ne 1 -or
+        $terrainEditState.content_hash_before -eq $terrainEditState.content_hash_after -or
+        [int]$terrainEditState.dirty_regions -lt 1) {
+        throw "The real Terrain click did not produce a valid, changed, dirty product state."
+    }
+    $terrainBaselineHash = $terrainEditState.content_hash_before
+    $terrainDirtyHash = $terrainEditState.content_hash_after
     Write-Output "[pass] The production Terrain brush committed an edit through a real viewport click."
 
     $sceneActionControls = Get-SceneDocumentActionControls -Path $stdoutPath
@@ -1022,8 +1106,8 @@ try {
         throw "Terrain-only New Scene confirmation did not expose its real product controls."
     }
     if ($newSceneConfirmation.Groups['scene_dirty'].Value -ne '0' -or
-        [int]$newSceneConfirmation.Groups['dirty_result'].Value -ne 0 -or
-        [int]$newSceneConfirmation.Groups['terrain_dirty_result'].Value -ne 0 -or
+        [int]$newSceneConfirmation.Groups['scene_dirty_query_result'].Value -ne 0 -or
+        [int]$newSceneConfirmation.Groups['terrain_dirty_query_result'].Value -ne 0 -or
         [int]$newSceneConfirmation.Groups['terrain_dirty_regions'].Value -lt 1 -or
         $newSceneConfirmation.Groups['active_name'].Value -ne $sceneName -or
         $newSceneConfirmation.Groups['active_path'].Value -ne $savedSceneRelativePath) {
@@ -1070,6 +1154,145 @@ try {
             [int]$terrainOnlyPending.Groups['dirty_regions'].Value) {
         throw "Cancelling New Scene changed the dirty terrain region count."
     }
+
+    # Reload must discard the dirty Terrain data itself, not only replace the
+    # Scene Document while terrain autosave remains active.
+    $sceneActionControls = Get-SceneDocumentActionControls -Path $stdoutPath
+    if ($null -eq $sceneActionControls -or
+        [int]$sceneActionControls.Groups['document_object_count'].Value -lt 1 -or
+        [int]$sceneActionControls.Groups['relative_path_empty'].Value -ne 0) {
+        throw "Reload preconditions were not established: the saved scene or its current action geometry is unavailable."
+    }
+    $reloadX = Convert-HenkaAutomationNumber $sceneActionControls.Groups['reload_x'].Value
+    $reloadY = Convert-HenkaAutomationNumber $sceneActionControls.Groups['reload_y'].Value
+    $reloadWidth = Convert-HenkaAutomationNumber $sceneActionControls.Groups['reload_width'].Value
+    $reloadHeight = Convert-HenkaAutomationNumber $sceneActionControls.Groups['reload_height'].Value
+    if ($reloadWidth -le 0.0 -or $reloadHeight -le 0.0 -or
+        $reloadX -lt ($detailsX - 0.5) -or $reloadY -lt ($detailsY - 0.5) -or
+        ($reloadX + $reloadWidth) -gt ($detailsX + $detailsWidth + 0.5) -or
+        ($reloadY + $reloadHeight) -gt ($detailsY + $detailsHeight + 0.5)) {
+        throw "The fresh Reload Scene target escaped the visible Object Details panel."
+    }
+    $terrainReloadRequestOffset = Get-FileLengthSafe -Path $stdoutPath
+    Send-HenkaObservedAutomationClick `
+        -EventPath $automationInputPath `
+        -StdoutPath $stdoutPath `
+        -X ($reloadX + ($reloadWidth * 0.5)) `
+        -Y ($reloadY + ($reloadHeight * 0.5)) `
+        -Purpose 'Reload Scene request with dirty Terrain' | Out-Null
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern 'scene_document_persistence action=reload_confirmation_pending' `
+            -StartingOffset $terrainReloadRequestOffset `
+            -TimeoutMilliseconds 10000)) {
+        throw "A real Reload Scene action did not protect the dirty Terrain edit with confirmation."
+    }
+    $terrainReloadConfirmation = Get-SceneTransitionDialogControls `
+        -Path $stdoutPath -Action 'reload'
+    if ($null -eq $terrainReloadConfirmation -or
+        $terrainReloadConfirmation.Groups['scene_dirty'].Value -ne '0' -or
+        [int]$terrainReloadConfirmation.Groups['terrain_dirty_regions'].Value -lt 1 -or
+        $terrainReloadConfirmation.Groups['active_name'].Value -ne $sceneName -or
+        $terrainReloadConfirmation.Groups['active_path'].Value -ne $savedSceneRelativePath) {
+        throw "The Reload confirmation did not prove a clean document with dirty Terrain in the expected saved scene."
+    }
+    $terrainDiscardX = Convert-HenkaAutomationNumber $terrainReloadConfirmation.Groups['discard_x'].Value
+    $terrainDiscardY = Convert-HenkaAutomationNumber $terrainReloadConfirmation.Groups['discard_y'].Value
+    $terrainDiscardWidth = Convert-HenkaAutomationNumber $terrainReloadConfirmation.Groups['discard_width'].Value
+    $terrainDiscardHeight = Convert-HenkaAutomationNumber $terrainReloadConfirmation.Groups['discard_height'].Value
+    $terrainReloadDiscardOffset = Get-FileLengthSafe -Path $stdoutPath
+    Send-HenkaObservedAutomationClick `
+        -EventPath $automationInputPath `
+        -StdoutPath $stdoutPath `
+        -X ($terrainDiscardX + ($terrainDiscardWidth * 0.5)) `
+        -Y ($terrainDiscardY + ($terrainDiscardHeight * 0.5)) `
+        -Purpose 'Reload Discard confirmation' | Out-Null
+    $terrainReloadPattern = 'HENKA_AUTOMATION_DIAGNOSTIC terrain_scene_reload [^\r\n]*\.'
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern $terrainReloadPattern `
+            -StartingOffset $terrainReloadDiscardOffset `
+            -TimeoutMilliseconds 15000)) {
+        throw "Reload Discard did not publish the terrain transaction result."
+    }
+    $terrainReloadLine = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $terrainReloadPattern
+    if ($null -eq $terrainReloadLine) {
+        throw "The Terrain Reload diagnostic disappeared after its readiness check."
+    }
+    $terrainReloadState = ConvertFrom-HenkaTerrainSceneReloadLine -Line $terrainReloadLine.Value
+    if ($null -eq $terrainReloadState -or
+        [int]$terrainReloadState.result -ne 0 -or
+        [int]$terrainReloadState.operation_result -ne 0 -or
+        $terrainReloadState.failure_stage -ne 'none' -or
+        [int]$terrainReloadState.dirty_regions_before -lt 1 -or
+        [int]$terrainReloadState.restored_regions -ne [int]$terrainReloadState.dirty_regions_before -or
+        [int]$terrainReloadState.dirty_regions_after -ne 0 -or
+        [int]$terrainReloadState.rollback_attempted -ne 0 -or
+        [int]$terrainReloadState.content_hash_before_valid -ne 1 -or
+        [int]$terrainReloadState.content_hash_after_valid -ne 1 -or
+        $terrainReloadState.content_hash_before -ne $terrainDirtyHash -or
+        $terrainReloadState.content_hash_after -ne $terrainBaselineHash) {
+        throw "Reload Discard failed to restore the saved Terrain baseline and clear dirty regions."
+    }
+    $savedTerrainSceneReloaded = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reloaded name=' +
+        [Regex]::Escape($sceneName) + '\.'
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern $savedTerrainSceneReloaded `
+            -StartingOffset $terrainReloadDiscardOffset `
+            -TimeoutMilliseconds 10000)) {
+        throw "Terrain Reload Discard did not complete the matching saved Scene Document reload."
+    }
+    Write-Output "[pass] Reload Discard restored the saved Terrain hash and retired all dirty regions."
+
+    # Re-establish the terrain-only dirty precondition for the following New
+    # Scene -> Save transaction using a fresh product ray result.
+    $terrainReeditOffset = Get-FileLengthSafe -Path $stdoutPath
+    Send-HenkaAutomationEvent `
+        -EventPath $automationInputPath `
+        -EventLine ('move {0} {1}' -f `
+            (Format-HenkaAutomationFloat -Value $terrainHitX), `
+            (Format-HenkaAutomationFloat -Value $terrainHitY)) `
+        -SettleMilliseconds 180
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern $terrainCursorPattern `
+            -StartingOffset $terrainReeditOffset `
+            -TimeoutMilliseconds 3000)) {
+        throw "The Terrain tool did not return a fresh ray result after Reload Discard."
+    }
+    $freshTerrainHit = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $terrainCursorPattern
+    if ($null -eq $freshTerrainHit -or
+        $freshTerrainHit.Groups['hit'].Value -ne '1' -or
+        [Math]::Abs((Convert-HenkaAutomationNumber $freshTerrainHit.Groups['x'].Value) - $terrainHitX) -gt 1.0 -or
+        [Math]::Abs((Convert-HenkaAutomationNumber $freshTerrainHit.Groups['y'].Value) - $terrainHitY) -gt 1.0) {
+        throw "The post-reload product ray did not confirm the same current Terrain target."
+    }
+    $terrainReeditOffset = Get-FileLengthSafe -Path $stdoutPath
+    Send-HenkaObservedAutomationClick `
+        -EventPath $automationInputPath `
+        -StdoutPath $stdoutPath `
+        -X (Convert-HenkaAutomationNumber $freshTerrainHit.Groups['x'].Value) `
+        -Y (Convert-HenkaAutomationNumber $freshTerrainHit.Groups['y'].Value) `
+        -Purpose 'post-reload Terrain brush click' | Out-Null
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern $terrainEditStatePattern `
+            -StartingOffset $terrainReeditOffset `
+            -TimeoutMilliseconds 10000)) {
+        throw "The real post-reload Terrain click did not publish edited state."
+    }
+    $terrainReeditLine = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $terrainEditStatePattern
+    $terrainReeditState = ConvertFrom-HenkaTerrainEditStateLine -Line $terrainReeditLine.Value
+    if ($null -eq $terrainReeditState -or
+        [int]$terrainReeditState.result -ne 0 -or
+        [int]$terrainReeditState.content_hash_before_valid -ne 1 -or
+        [int]$terrainReeditState.content_hash_after_valid -ne 1 -or
+        $terrainReeditState.content_hash_before -eq $terrainReeditState.content_hash_after -or
+        [int]$terrainReeditState.dirty_regions -lt 1) {
+        throw "The post-reload real Terrain edit did not restore the dirty-state precondition for New Scene."
+    }
+    Write-Output "[pass] The same product Terrain brush can edit again after confirmed Reload Discard."
 
     $sceneActionControls = Get-SceneDocumentActionControls -Path $stdoutPath
     if ($null -eq $sceneActionControls) {
@@ -1191,7 +1414,17 @@ try {
             ((Convert-HenkaAutomationNumber $saveAsControls.Groups['path_width'].Value) * 0.5)) `
         -Y ((Convert-HenkaAutomationNumber $saveAsControls.Groups['path_y'].Value) +
             ((Convert-HenkaAutomationNumber $saveAsControls.Groups['path_height'].Value) * 0.5))
+    $saveAsPathStateOffset = Get-FileLengthSafe -Path $stdoutPath
     Send-HenkaAutomationText -EventPath $automationInputPath -Text $saveAsRelativePath
+    $saveAsPathReadyPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls visible=1 mode=save_as .* relative_path_empty=0\.'
+    if (-not (Wait-FileContainsAfterOffset -Path $stdoutPath -Pattern $saveAsPathReadyPattern -StartingOffset $saveAsPathStateOffset -TimeoutMilliseconds 10000)) {
+        throw "The Save As editor did not publish fresh product state after its path changed."
+    }
+    $saveAsControls = Get-SceneSaveAsControls -Path $stdoutPath
+    if ($null -eq $saveAsControls -or
+        [int]$saveAsControls.Groups['relative_path_empty'].Value -ne 0) {
+        throw "Fresh Save As geometry did not match the populated canonical path state."
+    }
     Send-HenkaAutomationClickAt `
         -EventPath $automationInputPath `
         -X ((Convert-HenkaAutomationNumber $saveAsControls.Groups['save_x'].Value) +
@@ -1308,19 +1541,27 @@ try {
     Send-HenkaSceneObjectsControlClick -EventPath $automationInputPath -StdoutPath $stdoutPath -Id 'close_asset' -AssetOpen $true
     Assert-HenkaDocumentTelemetry -Path $stdoutPath -Name $assetName -Action "closed" -PartCount 4
     $projectManifestPath = Join-Path $userDataBasePath 'henka.project'
-    Invoke-HenkaPackagedSceneOpenWorkflow -Context @{
-        Process = $capturedProcess.Process
-        AutomationInputPath = $automationInputPath
-        StdoutPath = $stdoutPath
-        FrameCaptureDirectory = $frameCaptureDirectory
-        FrameCaptureRequestPath = $frameCaptureRequestPath
-        RuntimeDirectory = $runtimeDirectory
-        ExpectedCurrentSceneName = 'Untitled Scene'
-        SceneName = $sceneName
-        SavedScenePath = $savedScenePath
-        SavedSceneHash = $savedSceneHash
-        ProjectManifestPath = $projectManifestPath
-        ProjectManifestHash = (Get-FileHash -LiteralPath $projectManifestPath -Algorithm SHA256).Hash
+    try {
+        Invoke-HenkaPackagedSceneOpenWorkflow -Context @{
+            Process = $capturedProcess.Process
+            AutomationInputPath = $automationInputPath
+            StdoutPath = $stdoutPath
+            FrameCaptureDirectory = $frameCaptureDirectory
+            FrameCaptureRequestPath = $frameCaptureRequestPath
+            RuntimeDirectory = $runtimeDirectory
+            ExpectedCurrentSceneName = 'Untitled Scene'
+            SceneName = $sceneName
+            SavedScenePath = $savedScenePath
+            SavedSceneHash = $savedSceneHash
+            ProjectManifestPath = $projectManifestPath
+            ProjectManifestHash = (Get-FileHash -LiteralPath $projectManifestPath -Algorithm SHA256).Hash
+        }
+    }
+    catch {
+        Write-Output ("HENKA_VALIDATION_DIAGNOSTIC packaged_scene_open_error type={0} message={1}" -f $_.Exception.GetType().FullName, $_.Exception.Message)
+        Write-Output ("HENKA_VALIDATION_DIAGNOSTIC packaged_scene_open_error position={0}" -f $_.InvocationInfo.PositionMessage)
+        Write-Output ("HENKA_VALIDATION_DIAGNOSTIC packaged_scene_open_error stack={0}" -f $_.ScriptStackTrace)
+        throw
     }
 
     Write-Output "[pass] Editor-owned native authoring UI: create, add, save, close, and reopen completed."

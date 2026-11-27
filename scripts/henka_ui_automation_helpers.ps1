@@ -1230,6 +1230,369 @@ function ConvertFrom-HenkaAutomationDiagnosticFields {
     return [pscustomobject]$recognizedValues
 }
 
+function ConvertFrom-HenkaAutomationInputRecordLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    $fieldNames = @('record', 'type', 'button', 'release_consumed')
+    $fields = ConvertFrom-HenkaAutomationDiagnosticFields `
+        -Line $Line `
+        -EventName 'input' `
+        -FieldNames $fieldNames `
+        -RequiredFieldNames $fieldNames
+    if ($null -eq $fields -or
+        $fields.record -notmatch '^\d+$' -or
+        $fields.release_consumed -notmatch '^[01]$' -or
+        $fields.type -notmatch '^(move|button-down|button-up|wheel|key-down|key-up|text)$' -or
+        $fields.button -notmatch '^(none|left|right|middle)$') {
+        return $null
+    }
+    return $fields
+}
+
+function ConvertFrom-HenkaGameAuthoringPlayControlsLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    $fieldNames = @(
+        'available', 'entity_id', 'play_state', 'trigger_rect', 'play_rect')
+    $fields = ConvertFrom-HenkaAutomationDiagnosticFields `
+        -Line $Line `
+        -EventName 'game_authoring_play_controls' `
+        -FieldNames $fieldNames `
+        -RequiredFieldNames $fieldNames
+    if ($null -eq $fields -or $fields.available -ne '1' -or
+        $fields.entity_id -notmatch '^\d+$' -or
+        $fields.play_state -notmatch '^\d+$') {
+        return $null
+    }
+    return $fields
+}
+
+function ConvertFrom-HenkaGameAuthoringPhysicsDisclosureLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    $fieldNames = @('available', 'entity_id', 'expanded', 'rect')
+    $fields = ConvertFrom-HenkaAutomationDiagnosticFields `
+        -Line $Line `
+        -EventName 'game_authoring_physics_disclosure' `
+        -FieldNames $fieldNames `
+        -RequiredFieldNames $fieldNames
+    if ($null -eq $fields -or
+        $fields.available -ne '1' -or
+        $fields.entity_id -notmatch '^\d+$' -or
+        $fields.expanded -notmatch '^[01]$') {
+        return $null
+    }
+    return $fields
+}
+
+function ConvertFrom-HenkaClosePlaySaveLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    $fieldNames = @('result', 'play_locked_before', 'play_locked_after')
+    $fields = ConvertFrom-HenkaAutomationDiagnosticFields `
+        -Line $Line `
+        -EventName 'scene_close_play_save' `
+        -FieldNames $fieldNames `
+        -RequiredFieldNames $fieldNames
+    if ($null -eq $fields -or
+        $fields.result -notmatch '^-?\d+$' -or
+        $fields.play_locked_before -notmatch '^[01]$' -or
+        $fields.play_locked_after -notmatch '^[01]$') {
+        return $null
+    }
+    return $fields
+}
+
+function Get-HenkaAutomationClickConsumptionResult {
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Lines)
+
+    $records = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($line in $Lines) {
+        $record = ConvertFrom-HenkaAutomationInputRecordLine -Line $line
+        if ($null -ne $record) {
+            $records.Add($record)
+            if ($records.Count -gt 128) {
+                $records.RemoveAt(0)
+            }
+        }
+    }
+
+    for ($upIndex = $records.Count - 1; $upIndex -ge 2; --$upIndex) {
+        $up = $records[$upIndex]
+        if ($up.type -ne 'button-up' -or $up.button -ne 'left' -or
+            $up.release_consumed -ne '1') {
+            continue
+        }
+        $down = $records[$upIndex - 1]
+        $move = $records[$upIndex - 2]
+        if ($down.type -ne 'button-down' -or $down.button -ne 'left' -or
+            $down.release_consumed -ne '0' -or $move.type -ne 'move' -or
+            $move.button -ne 'none' -or $move.release_consumed -ne '0') {
+            continue
+        }
+        $moveSequence = [uint64]$move.record
+        $downSequence = [uint64]$down.record
+        $upSequence = [uint64]$up.record
+        if ($downSequence -ne ($moveSequence + 1) -or
+            $upSequence -ne ($downSequence + 1)) {
+            continue
+        }
+        return [pscustomobject]@{
+            Consumed = $true
+            MoveRecord = [string]$move.record
+            DownRecord = [string]$down.record
+            UpRecord = [string]$up.record
+            Reason = 'contiguous move/down/up with consumed left-button release'
+        }
+    }
+
+    $reason = if ($records.Count -eq 0) {
+        'no valid input records were observed'
+    } elseif (@($records | Where-Object {
+                $_.type -eq 'button-up' -and $_.button -eq 'left' -and
+                $_.release_consumed -eq '0'
+            }).Count -gt 0) {
+        'the left-button release was not consumed'
+    } elseif (@($records | Where-Object {
+                $_.type -eq 'button-up' -and $_.button -eq 'left'
+            }).Count -eq 0) {
+        'no left-button release record was observed'
+    } else {
+        'no contiguous monotonic move/down/up sequence was observed'
+    }
+    return [pscustomobject]@{
+        Consumed = $false
+        MoveRecord = ''
+        DownRecord = ''
+        UpRecord = ''
+        Reason = $reason
+    }
+}
+
+function Wait-HenkaAutomationClickConsumedAfterOffset {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][long]$StartingOffset,
+        [ValidateRange(1, 30000)][int]$TimeoutMilliseconds = 5000
+    )
+
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
+    $lastResult = Get-HenkaAutomationClickConsumptionResult -Lines @()
+    do {
+        $stream = $null
+        $reader = $null
+        try {
+            $stream = [System.IO.File]::Open(
+                $Path,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::Read,
+                [System.IO.FileShare]::ReadWrite)
+            if ($stream.Length -lt $StartingOffset) {
+                return [pscustomobject]@{
+                    Consumed = $false
+                    MoveRecord = ''
+                    DownRecord = ''
+                    UpRecord = ''
+                    Reason = 'the captured log was truncated after the interaction boundary'
+                }
+            }
+            $stream.Seek($StartingOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
+            $reader = [System.IO.StreamReader]::new(
+                $stream, [System.Text.Encoding]::UTF8, $true, 4096, $true)
+            $text = $reader.ReadToEnd()
+            $lines = @($text -split '\r?\n' | Where-Object { $_.Length -gt 0 })
+            $lastResult = Get-HenkaAutomationClickConsumptionResult -Lines $lines
+        }
+        finally {
+            if ($null -ne $reader) { $reader.Dispose() }
+            if ($null -ne $stream) { $stream.Dispose() }
+        }
+        if ($lastResult.Consumed -or [DateTime]::UtcNow -ge $deadline) {
+            return $lastResult
+        }
+        Start-Sleep -Milliseconds 25
+    } while ($true)
+}
+
+function ConvertTo-HenkaAutomationRegexResult {
+    param(
+        [Parameter(Mandatory = $true)][pscustomobject]$Fields,
+        [Parameter(Mandatory = $true)][string]$Line
+    )
+
+    $groups = @{
+        '0' = [pscustomobject]@{ Value = $Line }
+    }
+    foreach ($property in $Fields.PSObject.Properties) {
+        $groups[$property.Name] = [pscustomobject]@{
+            Value = [string]$property.Value
+        }
+    }
+    # Keep structured fields as well as the legacy Groups adapter so callers
+    # compare authoritative state by name rather than parsing diagnostic order.
+    return [pscustomobject]@{
+        Fields = $Fields
+        Groups = $groups
+        Value = $Line
+        Success = $true
+    }
+}
+
+function ConvertTo-HenkaAutomationGeometryResult {
+    param(
+        [Parameter(Mandatory = $true)][pscustomobject]$Fields,
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string[]]$RectangleMappings
+    )
+
+    $result = ConvertTo-HenkaAutomationRegexResult -Fields $Fields -Line $Line
+    foreach ($mapping in $RectangleMappings) {
+        $parts = $mapping.Split('=')
+        if ($parts.Count -ne 2 -or -not $Fields.PSObject.Properties[$parts[0]]) {
+            return $null
+        }
+        $coordinates = ([string]$Fields.($parts[0])).Split(',')
+        if ($coordinates.Count -ne 4) {
+            return $null
+        }
+        foreach ($index in 0..3) {
+            $suffix = @('x', 'y', 'width', 'height')[$index]
+            $result.Groups[$parts[1] + '_' + $suffix] = [pscustomobject]@{
+                Value = $coordinates[$index]
+            }
+        }
+    }
+    return $result
+}
+
+function ConvertFrom-HenkaSceneNameControlsLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    $fieldNames = @('available', 'label_rect', 'field_rect', 'rename_rect')
+    $fields = ConvertFrom-HenkaAutomationDiagnosticFields `
+        -Line $Line `
+        -EventName 'scene_name_controls' `
+        -FieldNames $fieldNames `
+        -RequiredFieldNames $fieldNames
+    if ($null -eq $fields -or $fields.available -ne '1') {
+        return $null
+    }
+    return $fields
+}
+
+function ConvertFrom-HenkaSceneDocumentActionControlsLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    $fieldNames = @(
+        'visible', 'document_object_count', 'selection_present',
+        'relative_path_empty', 'save_rect', 'save_as_rect', 'reload_rect',
+        'new_scene_rect', 'open_scene_rect')
+    $fields = ConvertFrom-HenkaAutomationDiagnosticFields `
+        -Line $Line `
+        -EventName 'scene_document_action_controls' `
+        -FieldNames $fieldNames `
+        -RequiredFieldNames $fieldNames
+    if ($null -eq $fields -or $fields.visible -ne '1') {
+        return $null
+    }
+    return $fields
+}
+
+function ConvertFrom-HenkaScenePathEditorControlsLine {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][ValidateSet('open', 'save_as')][string]$Mode
+    )
+
+    $fieldNames = @(
+        'visible', 'mode', 'path_rect', 'confirm_rect', 'cancel_rect',
+        'relative_path_empty')
+    $fields = ConvertFrom-HenkaAutomationDiagnosticFields `
+        -Line $Line `
+        -EventName 'scene_path_editor_controls' `
+        -FieldNames $fieldNames `
+        -RequiredFieldNames $fieldNames
+    if ($null -eq $fields -or $fields.visible -ne '1' -or
+        $fields.mode -ne $Mode) {
+        return $null
+    }
+    return $fields
+}
+
+function ConvertFrom-HenkaSceneTransitionControlsLine {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][ValidateSet('scene_transition_dialog', 'scene_transition_save_as', 'scene_transition_save_as_bounds')][string]$EventName,
+        [Parameter(Mandatory = $true)][ValidateSet('new', 'reload', 'open', 'close')][string]$Action
+    )
+
+    $fieldNames = switch ($EventName) {
+        'scene_transition_dialog' {
+            @(
+                'available', 'action', 'scene_dirty', 'scene_dirty_query_result',
+                'terrain_dirty_query_result', 'terrain_dirty_regions',
+                'content_width', 'content_height', 'active_name', 'active_path',
+                'object_count', 'selected_entity', 'save_x', 'save_y',
+                'save_width', 'save_height', 'discard_x', 'discard_y',
+                'discard_width', 'discard_height', 'cancel_x', 'cancel_y',
+                'cancel_width', 'cancel_height')
+        }
+        'scene_transition_save_as' {
+            @(
+                'available', 'action', 'path_x', 'path_y', 'path_width',
+                'path_height', 'save_x', 'save_y', 'save_width', 'save_height',
+                'cancel_x', 'cancel_y', 'cancel_width', 'cancel_height')
+        }
+        'scene_transition_save_as_bounds' {
+            @('available', 'action', 'content_width', 'content_height')
+        }
+    }
+    $fields = ConvertFrom-HenkaAutomationDiagnosticFields `
+        -Line $Line `
+        -EventName $EventName `
+        -FieldNames $fieldNames `
+        -RequiredFieldNames $fieldNames
+    if ($null -eq $fields -or $fields.available -ne '1' -or
+        $fields.action -ne $Action) {
+        return $null
+    }
+    return $fields
+}
+
+function ConvertFrom-HenkaTerrainEditStateLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    $fieldNames = @(
+        'result', 'content_hash_before_valid', 'content_hash_before',
+        'content_hash_after_valid', 'content_hash_after', 'world_stats_valid',
+        'dirty_regions')
+    return ConvertFrom-HenkaAutomationDiagnosticFields `
+        -Line $Line `
+        -EventName 'terrain_edit_state' `
+        -FieldNames $fieldNames `
+        -RequiredFieldNames $fieldNames
+}
+
+function ConvertFrom-HenkaTerrainSceneReloadLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    $fieldNames = @(
+        'action', 'result', 'operation_result', 'failure_stage',
+        'dirty_regions_before', 'restored_regions', 'dirty_regions_after',
+        'rollback_attempted', 'rollback_succeeded',
+        'content_hash_before_valid', 'content_hash_before',
+        'content_hash_after_valid', 'content_hash_after')
+    $fields = ConvertFrom-HenkaAutomationDiagnosticFields `
+        -Line $Line `
+        -EventName 'terrain_scene_reload' `
+        -FieldNames $fieldNames `
+        -RequiredFieldNames $fieldNames
+    if ($null -eq $fields -or $fields.action -ne 'reload_discard') {
+        return $null
+    }
+    return $fields
+}
+
 function ConvertFrom-HenkaSceneTransitionDecisionLine {
     param([Parameter(Mandatory = $true)][string]$Line)
     $fieldNames = @('action','choice','scene_retained','scene_dirty','terrain_dirty_regions','active_name','active_path','object_count','selected_entity','terrain_active')

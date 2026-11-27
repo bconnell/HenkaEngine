@@ -4626,7 +4626,13 @@ static bool test_open_scene_rehydrates_inline_material_shader(void)
     henka_scene_document_object persisted_object;
     henka_material source_material = henka_material_default();
     henka_material opened_material;
+    henka_scene_environment_desc source_environment;
+    henka_scene_environment_desc persisted_environment;
+    henka_scene_environment_desc opened_environment;
+    henka_vec3 expected_derived_moon_direction;
     henka_result open_result = HENKA_SUCCESS;
+    henka_result unsaved_result = HENKA_SUCCESS;
+    bool opened_has_unsaved_changes = false;
     bool success = false;
 
     (void)remove(scene_file);
@@ -4658,6 +4664,19 @@ static bool test_open_scene_rehydrates_inline_material_shader(void)
         goto cleanup;
     }
 
+    if (henka_scene_get_environment(source_scene, &source_environment) !=
+            HENKA_SUCCESS ||
+        !source_environment.sun.manual_direction ||
+        source_environment.moon.manual_direction ||
+        fabsf(source_environment.moon.direction.x - 0.4f) > 0.0001f ||
+        fabsf(source_environment.moon.direction.y - 1.0f) > 0.0001f ||
+        fabsf(source_environment.moon.direction.z - 0.2f) > 0.0001f)
+    {
+        fprintf(stderr,
+            "inline-material Open Scene fixture no longer starts with the default derived moon state\n");
+        goto cleanup;
+    }
+
     source_material.shader = basic_shader;
     source_material.base_color.x = 0.22f;
     source_material.base_color.y = 0.47f;
@@ -4674,6 +4693,12 @@ static bool test_open_scene_rehydrates_inline_material_shader(void)
         henka_scene_document_create(&persisted_document) != HENKA_SUCCESS ||
         henka_scene_document_load_file(
             persisted_document, project_root, relative_path) != HENKA_SUCCESS ||
+        henka_scene_document_get_environment(
+            persisted_document, &persisted_environment) != HENKA_SUCCESS ||
+        persisted_environment.moon.manual_direction ||
+        fabsf(persisted_environment.moon.direction.x - 0.4f) > 0.0001f ||
+        fabsf(persisted_environment.moon.direction.y - 1.0f) > 0.0001f ||
+        fabsf(persisted_environment.moon.direction.z - 0.2f) > 0.0001f ||
         henka_scene_document_get_object(
             persisted_document, document_id, &persisted_object) != HENKA_SUCCESS ||
         persisted_object.source.kind != HENKA_SCENE_DOCUMENT_SOURCE_NONE ||
@@ -4713,6 +4738,38 @@ static bool test_open_scene_rehydrates_inline_material_shader(void)
             stderr,
             "engine-backed Open Scene did not restore inline material values and shader authority (result=%d)\n",
             (int)open_result);
+        goto cleanup;
+    }
+
+    if (henka_scene_get_environment(opened_scene, &opened_environment) !=
+            HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    expected_derived_moon_direction = henka_vec3_scale(
+        henka_vec3_normalize(source_environment.sun.direction), -1.0f);
+    if (opened_environment.moon.manual_direction ||
+        fabsf(opened_environment.moon.direction.x -
+            expected_derived_moon_direction.x) > 0.0001f ||
+        fabsf(opened_environment.moon.direction.y -
+            expected_derived_moon_direction.y) > 0.0001f ||
+        fabsf(opened_environment.moon.direction.z -
+            expected_derived_moon_direction.z) > 0.0001f)
+    {
+        fprintf(stderr,
+            "Open Scene did not restore the derived moon direction from its saved sun state\n");
+        goto cleanup;
+    }
+
+    unsaved_result = sandbox3d_game_authoring_has_unsaved_changes(
+        opened_authoring, &opened_has_unsaved_changes);
+    if (unsaved_result != HENKA_SUCCESS || opened_has_unsaved_changes)
+    {
+        fprintf(
+            stderr,
+            "freshly opened scene baseline mismatch (result=%d, unsaved=%s)\n",
+            (int)unsaved_result,
+            opened_has_unsaved_changes ? "true" : "false");
         goto cleanup;
     }
 
