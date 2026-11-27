@@ -27,6 +27,17 @@ Current defaults are:
 - Rotate starts on the Y axis until constrained.
 - Scale starts as uniform scaling.
 
+## Numeric World Transform Inspector
+
+Object Details provides numeric Position and Scale fields for registered scene
+objects, plus Euler Rotation fields in degrees. Field edits remain pending until
+**Apply** publishes the complete transform through Game Authoring and its
+undo/redo history. **Revert** discards pending values and restores the current
+authoritative transform. The inspector is unavailable while Play is active or
+when the selected object is not registered and editable through Game Authoring.
+See [Object Details in the UI guide](ui.md#object-details) and the
+[Sandbox help](help/sandbox3d.md#object-details-panel).
+
 ## Local profiles
 
 The active profile and bindings appear in the Sandbox Help utility. Profiles are stored in the local `sandbox3d.settings` key/value file.

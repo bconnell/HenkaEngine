@@ -138,9 +138,20 @@ The smoke validates that protocol output remains on stdout while product
 diagnostics remain on stderr. It uses a bounded progress-aware response
 deadline rather than waiting for a fixed startup log line.
 
-Framebuffer capture, save, and reload are not part of this slice. They remain
-separate validation work until the corresponding canonical product paths are
-exposed through the harness.
+## Visual evidence boundary
+
+Framebuffer capture is not exposed by the MCP adapter. The repository's
+packaged Windows visual-evidence workflow is separate: it asks the running
+Sandbox to capture its completed application-owned framebuffer, then records
+the image dimensions, SHA-256, and capture source. The workflow is implemented
+by [`capture_visual_evidence_windows.ps1`](../scripts/capture_visual_evidence_windows.ps1).
+A successful process exit or the presence of an image file alone does not
+establish visual acceptance; the current capture must be reviewed for the
+intended visual claim.
+
+This MCP validation slice does not add framebuffer-capture, save, or reload
+operations to the adapter. The packaged capture workflow above is separate
+from MCP; scene save and reload are exercised through their own product paths.
 
 ## Security and ownership boundaries
 

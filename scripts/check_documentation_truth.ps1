@@ -26,6 +26,8 @@ $readme = Get-RepositoryText "README.md"
 $capabilities = Get-RepositoryText "docs/current-capabilities.md"
 $roadmap = Get-RepositoryText "docs/roadmap.md"
 $editorUi = Get-RepositoryText "docs/ui.md"
+$editorControls = Get-RepositoryText "docs/editor-controls.md"
+$mcpQaHarness = Get-RepositoryText "docs/mcp-qa-harness.md"
 $completionMatrix = Get-RepositoryText "docs/engine-completion-matrix.md"
 $codingStandard = Get-RepositoryText "docs/coding-standard.md"
 $actionApi = Get-RepositoryText "docs/action-api.md"
@@ -197,6 +199,30 @@ foreach ($workflowTerm in @("New Scene", "Save As", "Open Scene", "Reload", "Sav
     if ($sandboxHelp -notmatch [regex]::Escape($workflowTerm)) {
         Add-Finding "docs/help/sandbox3d.md: current packaged Game Authoring workflow is missing '$workflowTerm'"
     }
+}
+
+$transformInspectorSection = [regex]::Match(
+    $editorControls,
+    '(?ms)^## Numeric World Transform Inspector\s*\r?\n(.*?)(?=^##\s|\z)')
+if (-not $transformInspectorSection.Success -or
+    $transformInspectorSection.Groups[1].Value -notmatch '(?i)pending' -or
+    $transformInspectorSection.Groups[1].Value -notmatch '(?i)Apply' -or
+    $transformInspectorSection.Groups[1].Value -notmatch '(?i)Revert' -or
+    $transformInspectorSection.Groups[1].Value -notmatch '(?i)Game Authoring' -or
+    $transformInspectorSection.Groups[1].Value -notmatch '(?i)Play') {
+    Add-Finding "docs/editor-controls.md: numeric World Transform Inspector must explain pending fields, Apply/Revert, Game Authoring history, and its Play restriction"
+}
+
+$visualEvidenceSection = [regex]::Match(
+    $mcpQaHarness,
+    '(?ms)^## Visual evidence boundary\s*\r?\n(.*?)(?=^##\s|\z)')
+if (-not $visualEvidenceSection.Success -or
+    $visualEvidenceSection.Groups[1].Value -notmatch '(?i)MCP adapter' -or
+    $visualEvidenceSection.Groups[1].Value -notmatch '(?i)application-owned framebuffer' -or
+    $visualEvidenceSection.Groups[1].Value -notmatch '(?i)capture_visual_evidence_windows\.ps1' -or
+    $visualEvidenceSection.Groups[1].Value -notmatch '(?i)visual acceptance' -or
+    $visualEvidenceSection.Groups[1].Value -notmatch '(?i)does not add framebuffer-capture, save, or reload\s+operations to the adapter') {
+    Add-Finding "docs/mcp-qa-harness.md: distinguish MCP capture scope from packaged application-owned framebuffer evidence and visual acceptance"
 }
 
 $sceneDocumentVersionMatch = [regex]::Match(
