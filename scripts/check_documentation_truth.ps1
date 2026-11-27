@@ -33,8 +33,11 @@ $codingStandard = Get-RepositoryText "docs/coding-standard.md"
 $actionApi = Get-RepositoryText "docs/action-api.md"
 $modelLoading = Get-RepositoryText "docs/model-loading.md"
 $sceneArchitecture = Get-RepositoryText "docs/scene-authoring-architecture.md"
+$audioDocumentation = Get-RepositoryText "docs/audio.md"
+$runtimeFoundations = Get-RepositoryText "docs/runtime-foundations.md"
 $platformSupport = Get-RepositoryText "docs/platform-support.md"
 $sceneDocumentHeader = Get-RepositoryText "engine/include/henka/scene_document.h"
+$sceneDocumentSource = Get-RepositoryText "engine/src/core/scene_document.c"
 $authoringMesh = Get-RepositoryText "docs/authoring-mesh.md"
 $componentIdentities = Get-RepositoryText "docs/authoring-component-identities.md"
 $authoringMeshSource = Get-RepositoryText "engine/src/mesh/authoring_mesh.c"
@@ -244,6 +247,77 @@ if (-not $sceneDocumentVersionMatch.Success) {
     $readerRangeClaim = "reader explicitly accepts HSCN v1 through v$currentSceneDocumentVersion"
     if ($sceneArchitecture -notmatch [regex]::Escape($readerRangeClaim)) {
         Add-Finding "docs/scene-authoring-architecture.md: accepted HSCN reader range must match the versioned implementation"
+    }
+
+    $audioEmitterVersionMatch = [regex]::Match(
+        $sceneDocumentSource,
+        '(?s)format_version\s*>=\s*HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V(\d+)\s*\)\s*\{\s*uint32_t\s+audio_bus;')
+    $audioListenerVersionMatch = [regex]::Match(
+        $sceneDocumentSource,
+        '(?s)format_version\s*>=\s*HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V(\d+)\s*&&\s*\(\s*!henka_scene_document_reader_float\(\s*&reader\s*,\s*&candidate->audio_listener\.position\.x')
+    $renderResourcesVersionMatch = [regex]::Match(
+        $sceneDocumentSource,
+        '(?s)format_version\s*>=\s*HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION_V(\d+)\s*&&\s*!henka_scene_document_decode_render_resources')
+    $audioMatrixMatch = [regex]::Match(
+        $completionMatrix,
+        '(?m)^\|\s*Audio\s*\|[^\r\n]*$')
+    $audioMatrixText = if ($audioMatrixMatch.Success) { $audioMatrixMatch.Value } else { "" }
+    if (-not $audioEmitterVersionMatch.Success) {
+        Add-Finding "engine/src/core/scene_document.c: Audio emitter introduction version could not be determined"
+    }
+    if (-not $audioListenerVersionMatch.Success) {
+        Add-Finding "engine/src/core/scene_document.c: Audio listener introduction version could not be determined"
+    }
+    if (-not $renderResourcesVersionMatch.Success) {
+        Add-Finding "engine/src/core/scene_document.c: render-resource introduction version could not be determined"
+    }
+
+    if ($audioEmitterVersionMatch.Success -and $audioListenerVersionMatch.Success) {
+        $audioEmitterVersion = [int]$audioEmitterVersionMatch.Groups[1].Value
+        $audioListenerVersion = [int]$audioListenerVersionMatch.Groups[1].Value
+        $audioHistoryPattern = '(?is)Historically,\s*HSCN v' + $audioEmitterVersion +
+            ' introduced per-object audio emitter settings and HSCN\s*v' + $audioListenerVersion +
+            ' introduced the document-level listener\.\s*The current writer emits HSCN\s*v' +
+            $currentSceneDocumentVersion + '\.'
+        if ($audioDocumentation -notmatch $audioHistoryPattern) {
+            Add-Finding "docs/audio.md: historical emitter/listener format milestones and current writer version must match Scene Document source"
+        }
+
+        $audioMatrixPattern = '(?i)Current HSCN v' + $currentSceneDocumentVersion +
+            ' writer; Audio emitter fields introduced in v' + $audioEmitterVersion +
+            ' and listener in v' + $audioListenerVersion + '(?=[;|.])'
+        if (-not $audioMatrixMatch.Success -or $audioMatrixMatch.Value -notmatch $audioMatrixPattern) {
+            Add-Finding "docs/engine-completion-matrix.md: Audio persistence must distinguish historical field introduction from the current HSCN writer"
+        }
+    }
+
+    if ($renderResourcesVersionMatch.Success) {
+        $renderResourcesVersion = [int]$renderResourcesVersionMatch.Groups[1].Value
+        $renderResourcesHistoryPattern = '(?is)Historically,\s*HSCN v' + $renderResourcesVersion +
+            ' introduced persisted value-owned light descriptors and\s+local reflection-probe volumes\.\s*' +
+            'The current writer emits HSCN\s*v' + $currentSceneDocumentVersion + '\.'
+        if ($runtimeFoundations -notmatch $renderResourcesHistoryPattern) {
+            Add-Finding "docs/runtime-foundations.md: render-resource format history and current writer version must match Scene Document source"
+        }
+    }
+
+    $staleCurrentWriterPattern = '(?i)\bcurrent\b.{0,100}\b(?:HSCN|Scene Document)\s+v(\d+)\b'
+    foreach ($document in @(
+        [pscustomobject]@{ Path = "docs/audio.md"; Text = $audioDocumentation },
+        [pscustomobject]@{ Path = "docs/engine-completion-matrix.md"; Text = $audioMatrixText },
+        [pscustomobject]@{ Path = "docs/runtime-foundations.md"; Text = $runtimeFoundations }
+    )) {
+        foreach ($writerMatch in [regex]::Matches($document.Text, $staleCurrentWriterPattern)) {
+            if ([int]$writerMatch.Groups[1].Value -ne $currentSceneDocumentVersion) {
+                Add-Finding "$($document.Path): claims an obsolete current HSCN writer version v$($writerMatch.Groups[1].Value)"
+            }
+        }
+    }
+
+    if ($sceneArchitecture -notmatch '(?im)^### Historical V1 record contract\s*$' -or
+        $sceneArchitecture -match '(?i)\bFuture loaders may\b.{0,160}\b(?:validate|migrate|load)\b' -or
+        $sceneArchitecture -match '(?i)\bV1 code rejects newer unsupported format versions\b') {
+        Add-Finding "docs/scene-authoring-architecture.md: V1-only migration language must be identified as historical and agree with current reader support"
     }
 }
 

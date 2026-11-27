@@ -41,11 +41,10 @@ service in `engine/include/henka/audio.h`.
 - Destroyed or stale scene entities are rejected before they contribute audio.
   Scene and clip owners must stop dependent voices before destroying those
   borrowed objects.
-- Scene Document v8 stores a bounded, value-only emitter configuration on the
-  real authored object record and a value-only listener, including the
-  resident/streamed storage choice. v1 through v3 documents load with the
-  listener at its default, while v4 loads its authored listener and defaults
-  storage to resident; loading a legacy document does not rewrite it.
+- Historically, HSCN v3 introduced per-object audio emitter settings and HSCN
+  v4 introduced the document-level listener. The current writer emits HSCN
+  v17. The reader accepts HSCN v1 through v17; older versions default fields
+  that were not yet present, and loading a legacy document does not rewrite it.
 
 The headless-safe mixer is the deterministic production-output boundary for
 the renderer-independent portion of this slice. A client-only, caller-pumped

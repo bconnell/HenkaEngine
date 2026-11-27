@@ -539,9 +539,10 @@ Scenes support a bounded four-light point/spot list with:
 - inverse-square/range falloff;
 - spot cones.
 
-Scene Document v12 persists the value-owned light descriptors and local
-reflection-probe volumes. The renderer derives GPU shadow and probe-capture
-resources after load; those runtime resources are not document state.
+Historically, HSCN v12 introduced persisted value-owned light descriptors and
+local reflection-probe volumes. The current writer emits HSCN v17. The renderer
+derives GPU shadow and probe-capture resources after load; those runtime
+resources are not document state.
 
 Current GL 3.3 local shadow resources include:
 

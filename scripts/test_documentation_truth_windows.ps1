@@ -24,6 +24,7 @@ $copyTargets = @(
     "CONTRIBUTING.md",
     "LICENSE",
     "engine\include\henka\scene_document.h",
+    "engine\src\core\scene_document.c",
     "examples\sandbox3d\main.c",
     "templates\external_game_minimal\src\main.c",
     "engine\src\mesh\authoring_mesh.c"
@@ -35,7 +36,6 @@ function Invoke-TruthCheck {
         -FilePath "powershell.exe" `
         -Arguments @(
             "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
             "-File", $checker) `
         -WorkingDirectory $probeRoot `
         -Label "Run documentation truth check" `
@@ -63,6 +63,56 @@ try {
     if ((Invoke-TruthCheck) -ne 0) {
         throw "Documentation truth baseline unexpectedly failed."
     }
+
+    $audioPath = Join-Path $probeRoot "docs\audio.md"
+    $audioSource = [System.IO.File]::ReadAllText($audioPath)
+    [System.IO.File]::AppendAllText(
+        $audioPath,
+        [Environment]::NewLine + "Current Audio writer format: HSCN v8." + [Environment]::NewLine)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted a stale Audio writer-format claim."
+    }
+    Write-Host "[pass] Documentation truth rejected a stale Audio writer-format claim."
+    [System.IO.File]::WriteAllText($audioPath, $audioSource)
+
+    $matrixPath = Join-Path $probeRoot "docs\engine-completion-matrix.md"
+    $matrixSource = [System.IO.File]::ReadAllText($matrixPath)
+    $matrixAudioProbe = [regex]::Replace(
+        $matrixSource,
+        '(?i)Current HSCN v\d+ writer; Audio emitter fields introduced in v\d+ and listener in v\d+(?:[;|.])',
+        'Scene Document v6',
+        1)
+    if ($matrixAudioProbe -eq $matrixSource) {
+        throw "Documentation truth regression could not locate the Audio matrix format claim."
+    }
+    [System.IO.File]::WriteAllText($matrixPath, $matrixAudioProbe)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted a stale Audio matrix version claim."
+    }
+    Write-Host "[pass] Documentation truth rejected a stale Audio matrix version claim."
+    [System.IO.File]::WriteAllText($matrixPath, $matrixSource)
+
+    $runtimeFoundationsPath = Join-Path $probeRoot "docs\runtime-foundations.md"
+    $runtimeFoundationsSource = [System.IO.File]::ReadAllText($runtimeFoundationsPath)
+    [System.IO.File]::AppendAllText(
+        $runtimeFoundationsPath,
+        [Environment]::NewLine + "Current render-resource writer format: HSCN v12." + [Environment]::NewLine)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted a stale render-resource writer-format claim."
+    }
+    Write-Host "[pass] Documentation truth rejected a stale render-resource writer-format claim."
+    [System.IO.File]::WriteAllText($runtimeFoundationsPath, $runtimeFoundationsSource)
+
+    $sceneArchitecturePath = Join-Path $probeRoot "docs\scene-authoring-architecture.md"
+    $sceneArchitectureSource = [System.IO.File]::ReadAllText($sceneArchitecturePath)
+    [System.IO.File]::AppendAllText(
+        $sceneArchitecturePath,
+        [Environment]::NewLine + "Future loaders may migrate older HSCN formats." + [Environment]::NewLine)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted obsolete future-tense HSCN migration guidance."
+    }
+    Write-Host "[pass] Documentation truth rejected obsolete future-tense HSCN migration guidance."
+    [System.IO.File]::WriteAllText($sceneArchitecturePath, $sceneArchitectureSource)
 
     $editorControlsPath = Join-Path $probeRoot "docs\editor-controls.md"
     $editorControlsSource = [System.IO.File]::ReadAllText($editorControlsPath)
