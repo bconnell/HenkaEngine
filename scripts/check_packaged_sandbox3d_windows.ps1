@@ -2009,6 +2009,12 @@ foreach ($authoringFile in @(
 }
 Assert-PathExists -Path (Join-Path $assetsDir "textures\residency\residency_64.png") -Description "Packaged residency stress fixtures"
 Assert-PathExists -Path $helpPath -Description "Packaged offline help"
+Assert-PathExists -Path (Join-Path $repoRoot "docs\help\sandbox3d.md") -Description "Source offline help"
+$sourceHelpHash = (Get-FileHash -LiteralPath (Join-Path $repoRoot "docs\help\sandbox3d.md") -Algorithm SHA256 -ErrorAction Stop).Hash
+$packagedHelpHash = (Get-FileHash -LiteralPath $helpPath -Algorithm SHA256 -ErrorAction Stop).Hash
+if ($packagedHelpHash -ne $sourceHelpHash) {
+    throw "Packaged offline help does not match the current source documentation. Rebuild the package from this candidate."
+}
 Assert-PathExists -Path $readmePath -Description "Packaged run guide"
 Assert-PathExists -Path $packageInfoPath -Description "Packaged build marker"
 $packageSchema = Get-PackageInfoValue -Path $packageInfoPath -Name "Package schema"
