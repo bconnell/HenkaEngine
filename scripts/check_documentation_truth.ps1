@@ -31,6 +31,7 @@ $mcpQaHarness = Get-RepositoryText "docs/mcp-qa-harness.md"
 $completionMatrix = Get-RepositoryText "docs/engine-completion-matrix.md"
 $codingStandard = Get-RepositoryText "docs/coding-standard.md"
 $actionApi = Get-RepositoryText "docs/action-api.md"
+$actionHeader = Get-RepositoryText "engine/include/henka/action.h"
 $modelLoading = Get-RepositoryText "docs/model-loading.md"
 $sceneArchitecture = Get-RepositoryText "docs/scene-authoring-architecture.md"
 $audioDocumentation = Get-RepositoryText "docs/audio.md"
@@ -181,6 +182,12 @@ if ($completionMatrix -match '(?im)^##\s+Modeling-readiness gate for editor icon
 if ($readme -match '(?i)Scene/project serialization,\s*hierarchy authoring') {
     Add-Finding "README.md: hierarchy authoring exists within the bounded parent/unparent/reparent workflow; describe the broader gap precisely"
 }
+if ($readme -match '(?is)The current roadmap is 3D-first\.\s*Renderer completion leads the active sequence') {
+    Add-Finding "README.md: active priority must match the current game-authoring and editor-usability focus in docs/roadmap.md"
+}
+if ($roadmap -match '(?i)agent-driven development|The agent surface should expand|MCP-compatible agent adapter becomes appropriate|Henka should expose the Action API through a thin standards-oriented adapter') {
+    Add-Finding "docs/roadmap.md: describe future automation as a product capability, not an instruction to an agent"
+}
 if ($roadmap -match '(?i)explicit serialized per-instance override metadata is not yet available') {
     Add-Finding "docs/roadmap.md: HSCN v17 persists supported non-root prefab local-transform override metadata"
 }
@@ -189,6 +196,10 @@ if ($editorUi -match '(?im)^-\s*(?:Full hierarchy editing is planned separately|
 }
 if ($actionApi -match '(?is)The Sandbox\s+outliner,\s*hierarchy history,\s*and broader editor authoring surface remain\s+separate work') {
     Add-Finding "docs/action-api.md: bounded Scene Objects hierarchy projection and Game Authoring history are available"
+}
+if ($actionHeader -match '\bHENKA_ACTION_COMMAND_CLEAR_SCENE\b' -and
+    $actionApi -notmatch '\bHENKA_ACTION_COMMAND_CLEAR_SCENE\b') {
+    Add-Finding "docs/action-api.md: public Action API scene-clearing command is not documented"
 }
 if ($modelLoading -match '(?im)^\s*(?:-\s*editor hierarchy authoring\s*;?|Editor hierarchy authoring remains future work\.?)\s*$') {
     Add-Finding "docs/model-loading.md: distinguish imported model-node hierarchy support from existing scene-object parenting controls"

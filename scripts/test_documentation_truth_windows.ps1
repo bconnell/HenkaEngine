@@ -25,6 +25,7 @@ $copyTargets = @(
     "SUPPORT.md",
     "CONTRIBUTING.md",
     "LICENSE",
+    "engine\include\henka\action.h",
     "engine\include\henka\scene_document.h",
     "engine\src\core\scene_document.c",
     "examples\sandbox3d\main.c",
@@ -66,6 +67,43 @@ try {
     if ((Invoke-TruthCheck) -ne 0) {
         throw "Documentation truth baseline unexpectedly failed."
     }
+
+    [System.IO.File]::AppendAllText(
+        $readmePath,
+        [Environment]::NewLine + "The current roadmap is 3D-first. Renderer completion leads the active sequence." + [Environment]::NewLine)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted a stale README roadmap priority."
+    }
+    Write-Host "[pass] Documentation truth rejected a stale README roadmap priority."
+    [System.IO.File]::WriteAllText($readmePath, $readmeSource)
+
+    $actionApiPath = Join-Path $probeRoot "docs\action-api.md"
+    $actionApiSource = [System.IO.File]::ReadAllText($actionApiPath)
+    $withoutClearScene = [regex]::Replace(
+        $actionApiSource,
+        '(?im)^-\s*scene clearing.*HENKA_ACTION_COMMAND_CLEAR_SCENE.*\r?\n',
+        "",
+        1)
+    if ($withoutClearScene -eq $actionApiSource) {
+        throw "Documentation truth regression could not locate the Action API scene-clearing entry."
+    }
+    [System.IO.File]::WriteAllText($actionApiPath, $withoutClearScene)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted an undocumented Action API scene-clearing command."
+    }
+    Write-Host "[pass] Documentation truth rejected a missing Action API scene-clearing entry."
+    [System.IO.File]::WriteAllText($actionApiPath, $actionApiSource)
+
+    $roadmapPath = Join-Path $probeRoot "docs\roadmap.md"
+    $roadmapAgentSource = [System.IO.File]::ReadAllText($roadmapPath)
+    [System.IO.File]::AppendAllText(
+        $roadmapPath,
+        [Environment]::NewLine + "The agent surface should expand as the underlying contracts become deterministic, inspectable, and safe." + [Environment]::NewLine)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted agent-directed roadmap wording."
+    }
+    Write-Host "[pass] Documentation truth rejected agent-directed roadmap wording."
+    [System.IO.File]::WriteAllText($roadmapPath, $roadmapAgentSource)
 
     $audioPath = Join-Path $probeRoot "docs\audio.md"
     $audioSource = [System.IO.File]::ReadAllText($audioPath)

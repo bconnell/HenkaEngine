@@ -35,6 +35,7 @@ The Action API is local engine infrastructure. Network services, cloud bridges, 
 The current action context supports:
 
 - scene summary queries;
+- scene clearing (`HENKA_ACTION_COMMAND_CLEAR_SCENE` removes all scene entities and resets Action API selection and default-transform registrations);
 - object listing;
 - primitive-backed logical scene-object creation;
 - object deletion and rename;

@@ -14,7 +14,7 @@ Henka Engine is an early-stage open source C17 game engine and integrated develo
 - [Prefabs / Reusable Scene Objects](#prefabs--reusable-scene-objects)
 - [Roadmap dependency map](#roadmap-dependency-map)
 - [Workspace and tools](#workspace-and-tools)
-- [Agent and automation interface](#agent-and-automation-interface)
+- [Automation and tool integration](#automation-and-tool-integration)
 - [Game authoring foundation](#game-authoring-foundation)
 - [Asset and material workflow](#asset-and-material-workflow)
 - [2D and 2.5D direction](#2d-and-25d-direction)
@@ -314,15 +314,15 @@ Authoring.
 6. Extend undo and redo to more basic scene operations.
 7. Extend settings/save-slot and HAMS authoring persistence into a complete scene/project save and load workflow.
 
-## Agent and automation interface
+## Automation and tool integration
 
-Henka's local Action API already provides a useful architectural seam for agent-driven development. Tools and tests can submit validated engine operations and receive structured results through engine-owned authority.
+Henka's local Action API provides a supported way for tools and tests to submit validated engine operations and receive structured results through engine-owned authority.
 
-The agent surface should expand as the underlying contracts become deterministic, inspectable, and safe.
+Future automation integrations can build on this API as the underlying contracts become deterministic, inspectable, and safe.
 
 ### Readiness gates
 
-An MCP-compatible agent adapter becomes appropriate after these foundations are dependable:
+An MCP-compatible tool adapter is an option after these foundations are dependable:
 
 1. Action targets use persistent Scene Document identities.
 2. Action schemas and capability discovery are versioned.
@@ -334,11 +334,11 @@ An MCP-compatible agent adapter becomes appropriate after these foundations are 
 
 ### Planned integration
 
-Henka should expose the Action API through a thin standards-oriented adapter once those gates are met. The preferred direction is an MCP-compatible semantic tool surface for desktop development agents. WebMCP-compatible exposure can be evaluated when Henka has an appropriate browser or web-hosted surface.
+Once those gates are met, a thin standards-oriented adapter could expose the Action API to local development tools. An MCP-compatible semantic tool surface is one candidate; WebMCP-compatible integration may apply if Henka has an appropriate browser or web-hosted surface.
 
 Engine authority, validation, transactions, identity, undo boundaries, diagnostics, and test evidence remain inside Henka. The protocol adapter should stay transport-level infrastructure.
 
-MCP and WebMCP continue to evolve. Henka should track stable capability-discovery, schema, permission, and transport conventions before committing the adapter.
+Adapter compatibility depends on stable capability-discovery, schema, permission, and transport conventions.
 
 UI automation validates reachability, hit geometry, and presentation through the graphical editor. Henka's semantic Action API can provide deterministic authoring and inspection coverage for matching operations; API results complement rather than replace user-interface and visual validation.
 
