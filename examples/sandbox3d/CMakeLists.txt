@@ -39,6 +39,7 @@ add_executable(henka_sandbox3d
     project_save_transaction.c
     scene_name_editor.c
     scene_path_editor.c
+    project_scene_catalog.c
     mcp_server.c
     audio_runtime.c
     script_editor_model.c
@@ -51,6 +52,12 @@ target_link_libraries(henka_sandbox3d
     PRIVATE
         henka
 )
+
+if(TARGET SDL3::SDL3)
+    target_link_libraries(henka_sandbox3d PRIVATE SDL3::SDL3)
+elseif(TARGET SDL3::SDL3-static)
+    target_link_libraries(henka_sandbox3d PRIVATE SDL3::SDL3-static)
+endif()
 
 if(HENKA_ENABLE_KTX2_TRANSCODER)
     target_compile_definitions(henka_sandbox3d PRIVATE HENKA_WITH_KTX2_TRANSCODER=1)

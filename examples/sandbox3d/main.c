@@ -27081,6 +27081,16 @@ static henka_result sandbox3d_details_scene_actions_layout_for_state(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (state->scene_path_editor.open &&
+        state->scene_path_editor.mode ==
+            SANDBOX3D_SCENE_PATH_EDITOR_MODE_OPEN)
+    {
+        return sandbox3d_editor_layout_details_open_scene_catalog(
+            layout->object_details_panel,
+            sandbox3d_details_base_content_bounds(state, layout),
+            state->game_authoring != NULL,
+            out_layout);
+    }
     return sandbox3d_editor_layout_details_scene_actions(
         layout->object_details_panel,
         sandbox3d_details_base_content_bounds(state, layout),
@@ -31840,6 +31850,7 @@ static void sandbox3d_draw_scene_transition_modal(
         if (sandbox3d_scene_path_editor_draw(
                 &state->scene_transition_save_as_editor,
                 state->ui,
+                henka_engine_get_user_data_base_path(engine),
                 &path_layout,
                 &path_action) != HENKA_SUCCESS)
         {
@@ -32119,6 +32130,7 @@ static void sandbox3d_draw_game_authoring_scene_controls(
         result = sandbox3d_scene_path_editor_draw(
             &state->scene_path_editor,
             state->ui,
+            henka_engine_get_user_data_base_path(engine),
             actions_layout,
             &path_action);
         if (result != HENKA_SUCCESS)
@@ -32131,32 +32143,104 @@ static void sandbox3d_draw_game_authoring_scene_controls(
                 henka_result_to_string(result));
             return;
         }
-        if (sandbox3d_automation_input_is_owned() &&
-            sandbox3d_ui_geometry_report_changed_with_signature(
-                &state->game_authoring_scene_actions_report,
-                HENKA_INVALID_ENTITY,
-                actions_layout->path_field,
-                (int)state->scene_path_editor.mode,
-                sandbox3d_ui_state_signature_hash_text(
-                    state->scene_path_editor.relative_path)))
+        if (sandbox3d_automation_input_is_owned())
         {
-            printf(
-                "HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls visible=1 mode=%s path_rect=%.1f,%.1f,%.1f,%.1f confirm_rect=%.1f,%.1f,%.1f,%.1f cancel_rect=%.1f,%.1f,%.1f,%.1f relative_path_empty=%u.\n",
-                opening_scene ? "open" : "save_as",
-                actions_layout->path_field.x,
-                actions_layout->path_field.y,
-                actions_layout->path_field.width,
-                actions_layout->path_field.height,
-                actions_layout->path_confirm_button.x,
-                actions_layout->path_confirm_button.y,
-                actions_layout->path_confirm_button.width,
-                actions_layout->path_confirm_button.height,
-                actions_layout->path_cancel_button.x,
-                actions_layout->path_cancel_button.y,
-                actions_layout->path_cancel_button.width,
-                actions_layout->path_cancel_button.height,
-                state->scene_path_editor.relative_path[0] == '\0' ? 1U : 0U);
-            fflush(stdout);
+            size_t catalog_count = 0U;
+            size_t catalog_page = 0U;
+            size_t catalog_page_count = 0U;
+            henka_result catalog_result = HENKA_SUCCESS;
+            bool catalog_stale = false;
+            const char* catalog_paths[
+                SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS] = {NULL};
+            char signature_text[
+                HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES * 4U + 160U] = {0};
+            size_t catalog_row;
+
+            sandbox3d_scene_path_editor_get_catalog_state(
+                &state->scene_path_editor,
+                &catalog_count,
+                &catalog_page,
+                &catalog_page_count,
+                &catalog_result,
+                &catalog_stale);
+            for (catalog_row = 0U;
+                 catalog_row < SANDBOX3D_EDITOR_SCENE_CATALOG_VISIBLE_ROWS;
+                 ++catalog_row)
+            {
+                (void)sandbox3d_scene_path_editor_get_visible_catalog_entry(
+                    &state->scene_path_editor,
+                    catalog_row,
+                    &catalog_paths[catalog_row]);
+            }
+            (void)sandbox3d_scene_path_editor_get_catalog_signature(
+                &state->scene_path_editor,
+                signature_text,
+                sizeof(signature_text));
+
+            if (sandbox3d_ui_geometry_report_changed_with_signature(
+                    &state->game_authoring_scene_actions_report,
+                    HENKA_INVALID_ENTITY,
+                    actions_layout->path_field,
+                    (int)state->scene_path_editor.mode,
+                    sandbox3d_ui_state_signature_hash_text(signature_text)))
+            {
+                printf(
+                    "HENKA_AUTOMATION_DIAGNOSTIC scene_path_editor_controls visible=1 mode=%s path_rect=%.1f,%.1f,%.1f,%.1f confirm_rect=%.1f,%.1f,%.1f,%.1f cancel_rect=%.1f,%.1f,%.1f,%.1f relative_path_empty=%u relative_path=%s catalog_count=%zu catalog_page=%zu catalog_page_count=%zu catalog_result=%d catalog_stale=%u refresh_rect=%.1f,%.1f,%.1f,%.1f row0_rect=%.1f,%.1f,%.1f,%.1f row0_path=%s row1_rect=%.1f,%.1f,%.1f,%.1f row1_path=%s row2_rect=%.1f,%.1f,%.1f,%.1f row2_path=%s previous_rect=%.1f,%.1f,%.1f,%.1f page_rect=%.1f,%.1f,%.1f,%.1f next_rect=%.1f,%.1f,%.1f,%.1f.\n",
+                    opening_scene ? "open" : "save_as",
+                    actions_layout->path_field.x,
+                    actions_layout->path_field.y,
+                    actions_layout->path_field.width,
+                    actions_layout->path_field.height,
+                    actions_layout->path_confirm_button.x,
+                    actions_layout->path_confirm_button.y,
+                    actions_layout->path_confirm_button.width,
+                    actions_layout->path_confirm_button.height,
+                    actions_layout->path_cancel_button.x,
+                    actions_layout->path_cancel_button.y,
+                    actions_layout->path_cancel_button.width,
+                    actions_layout->path_cancel_button.height,
+                    state->scene_path_editor.relative_path[0] == '\0'
+                        ? 1U : 0U,
+                    state->scene_path_editor.relative_path[0] != '\0'
+                        ? state->scene_path_editor.relative_path : "<empty>",
+                    catalog_count,
+                    catalog_page,
+                    catalog_page_count,
+                    (int)catalog_result,
+                    catalog_stale ? 1U : 0U,
+                    actions_layout->path_refresh_catalog_button.x,
+                    actions_layout->path_refresh_catalog_button.y,
+                    actions_layout->path_refresh_catalog_button.width,
+                    actions_layout->path_refresh_catalog_button.height,
+                    actions_layout->path_catalog_entry_buttons[0].x,
+                    actions_layout->path_catalog_entry_buttons[0].y,
+                    actions_layout->path_catalog_entry_buttons[0].width,
+                    actions_layout->path_catalog_entry_buttons[0].height,
+                    catalog_paths[0] != NULL ? catalog_paths[0] : "<none>",
+                    actions_layout->path_catalog_entry_buttons[1].x,
+                    actions_layout->path_catalog_entry_buttons[1].y,
+                    actions_layout->path_catalog_entry_buttons[1].width,
+                    actions_layout->path_catalog_entry_buttons[1].height,
+                    catalog_paths[1] != NULL ? catalog_paths[1] : "<none>",
+                    actions_layout->path_catalog_entry_buttons[2].x,
+                    actions_layout->path_catalog_entry_buttons[2].y,
+                    actions_layout->path_catalog_entry_buttons[2].width,
+                    actions_layout->path_catalog_entry_buttons[2].height,
+                    catalog_paths[2] != NULL ? catalog_paths[2] : "<none>",
+                    actions_layout->path_catalog_previous_button.x,
+                    actions_layout->path_catalog_previous_button.y,
+                    actions_layout->path_catalog_previous_button.width,
+                    actions_layout->path_catalog_previous_button.height,
+                    actions_layout->path_catalog_page_label.x,
+                    actions_layout->path_catalog_page_label.y,
+                    actions_layout->path_catalog_page_label.width,
+                    actions_layout->path_catalog_page_label.height,
+                    actions_layout->path_catalog_next_button.x,
+                    actions_layout->path_catalog_next_button.y,
+                    actions_layout->path_catalog_next_button.width,
+                    actions_layout->path_catalog_next_button.height);
+                fflush(stdout);
+            }
         }
         if (path_action == SANDBOX3D_SCENE_PATH_EDITOR_ACTION_CANCEL)
         {
@@ -32363,14 +32447,30 @@ static void sandbox3d_draw_game_authoring_scene_controls(
                              SANDBOX3D_SCENE_PATH_EDITOR_MODE_OPEN) ==
                     HENKA_SUCCESS)
                 {
+                    const henka_result catalog_result =
+                        sandbox3d_scene_path_editor_refresh_catalog(
+                            &state->scene_path_editor,
+                            henka_engine_get_user_data_base_path(engine));
                     memset(
                         &state->game_authoring_scene_actions_report,
                         0,
                         sizeof(state->game_authoring_scene_actions_report));
-                    sandbox3d_set_status(
-                        state,
-                        false,
-                        "Enter a project-relative .hscene path, then choose Open.");
+                    if (catalog_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "Choose a scene or enter a project-relative .hscene path, then choose Open.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            false,
+                            false,
+                            "Scene list unavailable; enter a project-relative .hscene path to continue: %s.",
+                            henka_result_to_string(catalog_result));
+                    }
                 }
             }
             if (henka_ui_button(
