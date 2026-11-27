@@ -35,7 +35,9 @@ runtime, packaging, and external-project validation.
 ## Highlights
 
 - C17 runtime architecture with renderer-independent `henka_runtime`
-- Native editor/workspace with docked and detached tools
+- Native editor/workspace with docked and detached tools, bundled Atkinson
+  Hyperlegible typography, and a persisted global 100/125/150/200% Editor UI
+  Scale
 - Camera-driven Scene View Compass with snap, orbit, projection, and persisted preferences
 - glTF/GLB scene and PBR material workflow plus bounded OBJ loading
 - Integrated Object/Vertex/Edge/Face authoring with stable mesh-element identities
@@ -58,7 +60,7 @@ runtime, packaging, and external-project validation.
 | Core runtime | Available | Current C17 runtime APIs, bounded validation, and generation-checked scene identities |
 | Renderer | Available (Unhardened) | Current OpenGL path, Solid/Material Preview/Rendered policies, and PBR foundations |
 | Scene and camera | Available (Unhardened) | Current 3D entities, input actions, framing, gizmos, Compass, and 2.5D camera presets |
-| Editor workspace | In Progress | Current native docking, detached panels, tabs, layout persistence, and early authoring UI |
+| Editor workspace | In Progress | Docked/detached panels, responsive controls, numeric World Transform Inspector, bounded hierarchy controls, bundled Atkinson typography, and persisted global Editor UI Scale |
 | Modeling and authoring | Available | Bounded product-native Object/Vertex/Edge/Face modeling, topology operations, UV, persistence, and HAMS workflows |
 | Assets and materials | In Progress | Current glTF/GLB and OBJ loading, manager-owned dependencies, and validated instances |
 | Terrain and world | Foundation | Current bounded four-layer terrain, streaming, edits, LOD, persistence, and collision paths |
@@ -66,7 +68,7 @@ runtime, packaging, and external-project validation.
 | 2.5D | Foundation | Camera-side foundation: perspective/side/top/isometric workflows and orthographic zoom |
 | Networking/server | Foundation | Current renderer-free runtime, dedicated host, and bounded Terrain authority paths |
 | External projects | Foundation | Current separate game/server templates with Windows validation |
-| Game authoring | Foundation | Current bounded Scene Document, authored Physics/Interaction, runtime hierarchy foundation, Save/Reload, and isolated runtime Play scenes |
+| Game authoring | Foundation | Persistent scene names; New Scene; Save/Save As; Open and Reload; Save/Discard/Cancel for dirty scene or Terrain transitions and window close; isolated runtime Play scenes |
 | Prefabs | Available | Bounded reusable `.hprefab` capture/save/load/update, editor Create/Place/Update From Selected/Apply/Revert/Unpack/Delete workflow, durable supported instance overrides, and packaged/external public-API proof |
 | 2D | Planned | No dedicated 2D scope yet; renderer, sprites, layers, parallax, and animation remain open |
 | Audio | Available | Bounded resident/streamed PCM WAV, Ogg Vorbis, MP3, and FLAC playback, fixed voices, bus gains, entity spatialization, deterministic stereo PCM mixing, authored listener/editor controls, supported Lua/HenkaScript controls, and caller-pumped SDL3 output/recovery |
@@ -108,11 +110,15 @@ projection and info-strip controls. Detailed controls are in
 
 Henka is not only a modeling application. Its runtime includes scenes/entities,
 camera and input actions, asset management, rendering, physics, terrain,
-persistence, and a renderer-independent headless boundary. Full Game/Play
-authoring, full character-controller movement, end-user scripting, and mature project
-serialization are not yet available. Audio provides a bounded headless runtime,
-graphical Sandbox client output, camera/listener integration, editor authoring,
-persistence, and supported scripting controls.
+persistence, and a renderer-independent headless boundary. The Sandbox provides
+bounded scene authoring with New Scene, Save/Save As, Open, Reload, Save/Discard/Cancel
+protection for scene transitions and window close, and isolated Play sessions.
+Broader project-wide dirty-state protection, multi-scene navigation and
+organization, gameplay authoring, character movement, scripting workflows, and
+project serialization remain in progress or planned as described in the
+capability matrix. Audio provides a bounded headless runtime, graphical Sandbox
+client output, camera/listener integration, editor authoring, persistence, and
+supported scripting controls.
 
 ## Modeling and content authoring
 
@@ -274,7 +280,10 @@ continues to affect status.
   motion inheritance; capsule sweep, advanced slope traversal and response,
   and step-offset behavior remain open.
   Slope-aware grounding classification is available.
-- Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
+- Broader scene/project serialization and hierarchy organization beyond the
+  current bounded parent/unparent/reparent workflows remain open. Texture
+  painting, automatic UV unwrap, rigging, animation, and several advanced
+  topology tools also remain incomplete.
 - The Giraffe and Rocket are deterministic imported/generated reference assets
   maintained by the repository. They exercise current import, material,
   editing, persistence, packaging, and rendering workflows when explicitly

@@ -365,7 +365,8 @@ Current model/import gaps include:
 - skeletal animation;
 - skinning;
 - morph targets;
-- editor hierarchy authoring;
+- automatic materialization of imported model-node hierarchies as separately
+  editable scene objects;
 - complete editor import workflows;
 - compressed glTF buffer extensions outside the supported boundary;
 - production refraction and layered-volume rendering for imported materials;

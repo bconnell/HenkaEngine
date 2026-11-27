@@ -15,24 +15,38 @@ Advanced renderer features, XR, additional devices, and further platform expansi
 
 ## Editor and product experience
 
-The 3D roadmap includes an integrated graphical editor for creating, editing, testing, and packaging game projects.
+The native Sandbox already provides an integrated docked and detached editor
+workspace with Scene View, utility panels, Object Details, and bounded authoring
+tools. The 3D roadmap continues to make these workflows discoverable, reliable,
+and complete for creating, editing, testing, and packaging game projects.
 
 ### Product identity
 
-Planned editor improvements include consistent Henka application naming, icons, build and version information, About and licensing information, and clear startup, project loading, error, and shutdown screens. Consistent terminology across menus, inspectors, dialogs, help, diagnostics, and packages will support familiar navigation.
+Further editor identity improvements include consistent application naming,
+icons, build and version information, About and licensing information, and
+clear startup, project loading, error, and shutdown presentation. Consistent
+terminology across menus, inspectors, dialogs, help, diagnostics, and packages
+will support familiar navigation.
 
 ### Design system
 
-The editor is moving toward a consistent visual and interaction design, with:
+The editor already ships bundled Atkinson Hyperlegible typography and a
+persisted global Editor UI Scale. Ongoing design-system work continues to
+improve consistency and interaction clarity, including:
 
-- readable typography, scalable controls, consistent spacing, and panel layouts;
+- continued text readability, responsive controls, consistent spacing, and
+  panel layouts;
 - buttons, toggles, checkboxes, segmented controls, dropdowns, numeric and vector inputs, sliders, tabs, trees, toolbars, breadcrumbs, search, context menus, tooltips, dialogs, notifications, progress indicators, and error messages;
 - clear hover, pressed, selected, focused, disabled, warning, destructive, invalid, and modified states;
 - a refined dark appearance, with additional appearance options planned as the editor matures.
 
 ### Information architecture and discoverability
 
-Planned workspace improvements bring scene hierarchy, Scene View, Object Details, project/content browsing, modeling, materials, terrain, animation, audio, scripting, diagnostics, packaging, and profiling into a coherent editing environment. Context-sensitive controls and searchable commands will make relevant tools easier to find.
+Further workspace improvements will better connect the existing Scene View,
+bounded hierarchy and Object Details workflows with project/content browsing,
+modeling, materials, terrain, animation, audio, scripting, diagnostics,
+packaging, and profiling. Context-sensitive controls and searchable commands
+will make relevant tools easier to find.
 
 ### Project and content experience
 
@@ -45,17 +59,33 @@ Planned project and asset management features include:
 
 ### Error, progress, and dirty-state UX
 
-Planned improvements include useful recovery messages, operation progress and safe cancellation where supported, visible modified-state indicators for scenes and other authored resources, and reliable Save All, close, and project-switch behavior. Descriptive undo/redo labels will help users understand which action is being reversed or repeated.
+New/Open/Reload and editor-close transitions already protect dirty Scene
+Document and Terrain state with Save, Discard, or Cancel. Further work extends
+modified-state tracking to more authored resources and adds broader Save All
+and project-switch behavior, with useful recovery messages and safe operation
+progress where supported. Descriptive undo/redo labels will help users
+understand which action is being reversed or repeated.
 
 ### Viewport and authoring polish
 
-Viewport plans include selection and hover feedback, grids and overlays, transform gizmos, snapping, camera previews, topology displays, pivots, and debug views.
+Further viewport work refines existing selection feedback, grids, transform
+gizmos, snapping, and topology displays while adding capabilities such as
+camera previews, expanded pivot controls, and useful debug views.
 
-Modeling improvements include discoverable component selection, preview and numeric input, Apply/Cancel, snapping, soft editing, topology warnings, and material previews through the graphical editor.
+Henka already provides discoverable component selection and a broad set of
+preview/Apply/Cancel topology operations. Further modeling work improves
+numeric workflows, snapping, soft editing, topology diagnostics, and material
+preview through the graphical editor.
 
 ### Accessibility and layout acceptance
 
-The roadmap includes keyboard navigation, visible focus, UI scaling, readable text, contrast, color-independent status cues, high-DPI behavior, and reduced-motion options where relevant. Validation will cover representative resolutions, ultrawide layouts, display scaling, clipping, overlap, control accessibility, and layout restoration. These are development goals rather than a claim of complete accessibility conformance.
+The editor has a bundled readable font and global UI scaling. Further
+accessibility and layout work includes keyboard navigation, visible focus,
+contrast, color-independent status cues, operating-system high-DPI behavior,
+and reduced-motion options where relevant. Validation continues across
+representative resolutions, display scales, clipping, overlap, control
+accessibility, and layout restoration. These plans do not claim complete
+accessibility conformance.
 
 ## Packaging, distribution, and release engineering
 

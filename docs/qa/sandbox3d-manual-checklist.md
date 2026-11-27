@@ -2,6 +2,10 @@
 
 Use this checklist when you want to confirm that `henka_sandbox3d` is visually readable and that its basic controls still behave as expected.
 
+Sandbox is the integrated editor. Normal startup and explicit reference/test
+fixtures are separate paths; do not treat a Showcase capture as the ordinary
+default scene.
+
 ## Before you start
 
 - Build the project from the repository root.
@@ -24,7 +28,8 @@ Solid, Material Preview, and Rendered comparison, run:
 This waits for the application CAPTURE_READY metadata before capturing each
 shaded mode. It writes generated images plus per-mode logs under the local
 evidence root returned by `Get-HenkaEvidenceRoot`; it does not add them to the
-repository.
+repository. `-IncludeStartupShowcase` explicitly loads the Showcase reference
+fixture and does not describe ordinary startup content.
 
 ## Packaged executable test
 
@@ -112,7 +117,7 @@ repository.
 42. Confirm panel background contrast is readable against the workspace.
 43. Confirm the graphite and slate theme feels neutral and tool-focused.
 44. Confirm the Tools panel `Main` and `Panels/Status` pages are readable and that page switching is obvious.
-45. Confirm the Scene Objects panel can reach every sample object through its page buttons or mouse wheel paging.
+45. Confirm the Scene Objects panel can reach every current scene object through its page buttons or mouse wheel paging.
 46. Confirm utility tabs are readable and the active utility state is obvious.
 47. Confirm Help, Scene Legend, Object Info, Paths, Settings, and Diagnostics are usable in-window.
 48. Confirm clicking docked or floating panels does not pick scene objects.
@@ -148,9 +153,45 @@ repository.
 73. Press `R`, then `X`, `Y`, and `Z` in separate attempts; confirm the active rotation axis status changes and `Enter` applies the preview.
 74. Press `S`, move the mouse, and confirm `Left Mouse` applies the preview while `Right Mouse` cancels safely.
 75. Hold `Left Ctrl` during a transform and confirm stepped adjustment. Hold `Left Shift` and confirm finer adjustment.
-76. With no transform active, confirm `Escape` still closes panels first, releases capture next, and exits only after those states are clear.
+76. With no modal or active operation, confirm `Escape` closes panels first and
+    releases capture before requesting exit. With dirty Scene Document or
+    Terrain state, confirm it opens Save / Discard / Cancel and `Escape` cancels
+    without discarding.
 77. Add a temporary custom profile using [editor-controls.md](../editor-controls.md), restart, and confirm its trimmed name and bindings appear in Help.
 78. Corrupt a temporary controls version or key in a test package copy and confirm the runtime falls back to `Henka Default` without crashing.
+79. In `Utility > Settings`, select each Editor UI Scale value (`100%`, `125%`, `150%`, and `200%`) and confirm text, controls, and hit regions update without clipping or overlap.
+80. Change workspace presets and restore a saved layout; confirm the global Editor UI Scale is unchanged. Restart and confirm the chosen scale persists.
+81. Treat operating-system display scale as a separate variable; changing Editor UI Scale alone does not prove non-100% OS-DPI support.
+
+## Scene and project workflow verification
+
+Use at least two saved `.hscene` files in a disposable project. Keep the
+project's startup-scene choice distinct from the currently open scene.
+
+1. Choose **New Scene** with a clean document and confirm it creates an empty,
+   camera-ready scene without a saved path.
+2. Confirm Save and Reload fail closed until the untitled scene is assigned a
+   path with **Save As**.
+3. Save the new scene under a new project-relative name. Confirm the scene
+   name and object identity survive close/reopen.
+4. Save a second scene and select it as the project startup scene. Use **Open**
+   to open the first scene and confirm that Open Scene does not change the
+   project's startup selection.
+5. Use **Reload** on a saved scene after editing it and confirm the saved
+   content is restored.
+6. Make the Scene Document dirty and exercise **Save**, **Discard**, and
+   **Cancel** for New, Open, Reload, and window close. Cancel must retain the
+   current scene and edits; Save proceeds only after persistence succeeds.
+7. Repeat the transition checks with dirty Terrain state. Confirm both scene
+   and Terrain changes are saved before a Save transition continues.
+8. Start Play with a dirty authored document and request window close. Save
+   must stop Play before saving; Cancel must keep the editor open and preserve
+   the active state.
+9. Confirm an invalid or missing Open target leaves the previously active
+   scene and selection intact.
+10. Close and relaunch the project from its normal project root; confirm launch
+    loads the manifest-selected startup scene while Open Scene continues to
+    change only the active document.
 
 ## Physics QA Verification
 
@@ -176,8 +217,9 @@ repository.
 
 - A window opens with the title `Henka Engine Sandbox 3D`.
 - Console help prints once at startup.
-- The console legend explains what each example object represents.
-- The sandbox keeps running until you close it or press `Escape` while mouse capture is released.
+- The scene legend may describe optional sample/reference objects; those
+  descriptions do not imply that the objects are in the ordinary startup scene.
+- The sandbox keeps running until a clean close request is accepted. With dirty Scene Document or Terrain state, window close or `Escape` opens Save / Discard / Cancel; `Escape` cancels that prompt.
 - If `user/sandbox3d.settings` is missing, the sandbox should still start with safe defaults.
 
 ## Expected scene examples
@@ -215,8 +257,8 @@ Use `--primitive-gallery` when the engineering samples are specifically under te
 - `F4`: show or hide the sandbox panels
 - `F5`: switch Standard and Focus Viewport layouts
 - `H`: print controls and the scene legend again
-- `Escape`: close the UI first, then release mouse capture, then exit
-- Window close: exit
+- `Escape`: cancel the active dialog or operation; otherwise close the UI, release mouse capture, and request exit. Dirty Scene Document or Terrain state opens Save / Discard / Cancel.
+- Window close: close immediately when clean; dirty Scene Document or Terrain prompts for Save / Discard / Cancel
 
 ## Expected sandbox panel behavior
 
@@ -278,12 +320,12 @@ Use `--primitive-gallery` when the engineering samples are specifically under te
 Mark each item as `Pass`, `Needs Review`, or `Fail`.
 
 - Window title is correct
-- Textured cube is visible
+- Optional primitive-gallery Textured Cube is visible when that fixture is selected
 - Ground is visible
-- Material ball is visible
-- OBJ marker is visible
-- Missing-texture fallback object is visible
-- Missing-model fallback object is visible
+- Optional primitive-gallery Material Ball is visible when that fixture is selected
+- Optional primitive-gallery OBJ Marker is visible when that fixture is selected
+- Optional primitive-gallery Missing Texture fallback is visible when that fixture is selected
+- Optional primitive-gallery Missing Model fallback is visible when that fixture is selected
 - Debug grid is visible
 - Lighting keeps the scene readable
 - `W A S D` movement works
@@ -310,6 +352,10 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - UI camera speed controls work
 - UI reset camera works
 - UI save settings works
+- Editor UI Scale offers `100%`, `125%`, `150%`, and `200%`; restoring a
+  workspace layout leaves it unchanged
+- Editor UI Scale persists after restart. OS display scaling is a separate
+  setting and validation dimension.
 - UI reset sandbox settings works
 - UI visibility toggle works
 - UI focus camera works
@@ -326,11 +372,11 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - Utility tabs are readable
 - Active utility state is clear
 - In-window status feedback works
-- `Escape` closes the UI first
+- `Escape` closes the UI first while no modal or active operation is taking precedence
 - Persisted state reloads after a clean restart
 - `H` help prints again
-- `Escape` releases capture first, then exits
-- Window close exits cleanly
+- `Escape` requests exit only after the UI is closed and capture is released; dirty Scene Document or Terrain opens Save / Discard / Cancel, and `Escape` cancels that prompt
+- Clean window close exits; dirty Scene Document / Terrain uses Save / Discard / Cancel
 - Resize behavior remains readable
 - Packaged executable launches from the root returned by `Get-HenkaPackageRoot`
 - Packaged assets load without relying on the repo root
@@ -348,7 +394,7 @@ Do not commit screenshots unless that is an intentional, reviewed part of the re
 ## Known limitations
 
 - OBJ loading is still early and limited to the documented subset in [docs/model-loading.md](../model-loading.md).
-- The UI overlay is still intentionally small and is not an editor.
+- Editor usability, hierarchy/project workflows, and subsystem integration remain in active development; see [current capabilities](../current-capabilities.md) and the [roadmap](../roadmap.md) for their bounded current scope.
 - Production panels can detach into separate OS-level windows with close-to-redock recovery, matching controls, saved placement, and bounded title-bar drag-back recognition when a focused detached window enters the main-window envelope. Detachable Scene View remains open and requires separate manual validation if implemented later.
 - Local action and viewport interaction tests now prove more basic selection and transform outcomes, but manual QA is still required for visual feel and drag comfort.
 - Manual visual inspection is still the best way to confirm scene readability and interaction feel.
@@ -363,17 +409,18 @@ Tester:
 Build:
 
 Scene visibility:
-- Showcase Giraffe:
-- Showcase Rocket:
-- Ground:
-- Debug Grid:
+- Normal startup: centered editable Ground and default environment, with no reference or diagnostic objects:
+- Optional Showcase/reference fixture (if explicitly loaded):
+- Optional primitive gallery (if explicitly selected):
+- Debug Grid (only when enabled or included by the selected fixture):
 - Rendered ground/environment has no unexplained center crease or left/right presentation split:
-- Primitive gallery (if selected):
-- Textured Cube:
-- Material Ball:
-- OBJ Marker:
-- Missing Texture:
-- Missing Model:
+- Optional Showcase Giraffe (if included by the selected reference fixture):
+- Optional Showcase Rocket (if included by the selected reference fixture):
+- Optional primitive-gallery Textured Cube:
+- Optional primitive-gallery Material Ball:
+- Optional primitive-gallery OBJ Marker:
+- Optional primitive-gallery Missing Texture:
+- Optional primitive-gallery Missing Model:
 
 Controls:
 - W/A/S/D:
@@ -397,6 +444,7 @@ Controls:
 - UI camera speed:
 - UI reset camera:
 - UI save settings:
+- Editor UI Scale at 100%, 125%, 150%, and 200%; workspace independence and restart persistence:
 - UI reset settings:
 - UI visibility toggle:
 - UI focus camera:

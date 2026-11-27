@@ -96,8 +96,8 @@ The Sandbox stores local settings for:
 | `F` | Frame selected object |
 | `H` | Print controls and scene legend |
 | `Home` | Reset camera view |
-| `Escape` | Close UI, release mouse, then exit through the normal sequence |
-| Window close | Exit |
+| `Escape` | Cancel an active operation or dialog; otherwise close the UI, release mouse capture, then request exit. Dirty Scene Document or Terrain state opens Save / Discard / Cancel |
+| Window close | Close immediately when clean; dirty Scene Document or Terrain state opens Save / Discard / Cancel |
 
 ### Transform hotkeys
 
@@ -462,6 +462,13 @@ Press `F4` to show or hide panels. Press `F5` to switch the primary workspace mo
 
 When panels are hidden, a small viewport hint shows the `F4` and `F5` controls.
 
+### Editor UI Scale
+
+Open `Utility > Settings` and choose **Editor UI Scale**: `100%`, `125%`,
+`150%`, or `200%`. The selected scale is a persisted global editor
+preference; switching or restoring a workspace layout does not change it.
+Operating-system display scaling is separate from this preference.
+
 If expected panels are missing after a build, refresh the package:
 
 ```powershell
@@ -582,7 +589,7 @@ Current fields include:
 
 ### New Scene
 
-In Game Authoring, **New Scene** is available from the Actions group without selecting an object. It asks for confirmation before replacing the current document. Cancel keeps the current scene and any unsaved edits. Confirm creates an empty, unsaved scene with the normal camera and default environment and clears the selection; it does not modify the previously saved scene file.
+In Game Authoring, **New Scene** is available from the Actions group without selecting an object. If the Scene Document or Terrain has unsaved changes, the shared Save / Discard / Cancel prompt protects them before replacement. If both are clean, the new scene opens immediately. Cancel retains the current scene and edits. New Scene creates an empty, unsaved scene with the normal camera and default environment and clears the selection; it does not modify the previously saved scene file.
 
 The new scene has no saved path. Save and Reload fail closed until a path exists; use **Save As** to choose a project-relative scene path. A successful Save As writes the new `.hscene` file and selects it as the project's startup scene.
 
@@ -616,7 +623,7 @@ any dirty Terrain state have been saved successfully; if saving fails, the
 current document remains active. An untitled scene has no save path, so use
 **Save As** before choosing Save in a transition prompt.
 
-While Play is running or paused, scene authoring edits, scene save/reload, and other scene mutations are rejected.
+While Play is running or paused, scene authoring edits, scene save/reload, and other scene mutations are rejected. A window-close request remains available: if authored Scene Document or Terrain state is dirty, it uses the same Save / Discard / Cancel choices. Choosing Save stops Play before saving; Cancel keeps the editor open and leaves the active state intact.
 
 ### Play lifecycle
 
@@ -1044,7 +1051,9 @@ The packaged folder is intended to remain usable after being copied away from th
 
 ## Current limitations
 
-The current Sandbox remains an early engine/editor workspace.
+The Sandbox is Henka's integrated editor and a packaged end-to-end validation
+target. Its current workflows are bounded, and product maturity remains in
+progress.
 
 ### Asset and model limits
 
@@ -1054,14 +1063,17 @@ The current Sandbox remains an early engine/editor workspace.
 - OBJ material libraries remain unsupported.
 - Concave-polygon correction beyond basic fan triangulation remains unsupported.
 - Skeletal animation, skinning, and morph targets remain unavailable.
-- Editor hierarchy authoring remains future work.
+- Broader hierarchy organization remains future work beyond the current
+  bounded parent, unparent, and reparent controls and their Scene Objects / Object Details projections.
 
 ### Save and project limits
 
 - Local settings use a small key/value format.
 - Separate save-data foundations cover scene ID, camera pose, and simple flags.
 - Complete shipped-game save systems remain future work.
-- Complete scene/project authoring remains future work.
+- Broader scene/project authoring remains future work beyond the current
+  bounded New Scene, Save/Save As, Open, Reload, and manifest-selected startup
+  workflows.
 
 ### UI and 2.5D limits
 

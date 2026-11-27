@@ -7,7 +7,7 @@ Henka Engine is an early-stage open source C17 game engine and integrated develo
 ## Contents
 
 - [Current focus](#current-focus)
-- [Active major-system sequence](#active-major-system-sequence)
+- [Planned capability progression](#planned-capability-progression)
 - [Near-term priorities](#near-term-priorities)
 - [Character Controller](#character-controller)
 - [Scene Hierarchy / Parenting Maturity](#scene-hierarchy--parenting-maturity)
@@ -28,7 +28,7 @@ Henka Engine is an early-stage open source C17 game engine and integrated develo
 
 ## Current focus
 
-Henka is expanding its native 3D runtime and integrated editor into a practical game-development environment. Renderer and native modeling foundations are available within documented limits. Recent editor development includes editable transforms, scene naming, New Scene, transactional Save As, and opening existing scenes. The next areas of focus include unsaved-change protection, project management, scene organization, and broader authoring workflows.
+Henka is expanding its native 3D runtime and integrated editor into a practical game-development environment. Renderer and native modeling foundations are available within documented limits. Recent editor development includes editable transforms, scene naming, New Scene, transactional Save As, Open Scene, and Save/Discard/Cancel protection for scene transitions and window close. Near-term work includes project-wide dirty-state protection, multiple-scene project management, hierarchy organization, and broader authoring workflows.
 
 The remaining 3D roadmap covers:
 
@@ -39,30 +39,30 @@ The remaining 3D roadmap covers:
 
 See [Current Capabilities](current-capabilities.md) and the [3D Engine Completion Matrix](engine-completion-matrix.md) for implemented features and known limitations.
 
-## Active major-system sequence
+## Planned capability progression
 
 The planned progression of major engine capabilities is:
 
-1. **Renderer Completion**.
-2. **3D Modeling & Native Content Authoring**.
-3. **3D Assets & Materials**.
-4. **3D Physics**.
-5. **3D Game Authoring / Scene Document / Project Workflow**.
-6. **3D Prefab**.
-7. **3D Camera / Viewport**.
-8. **3D Terrain & World**.
-9. **3D Lighting / Sky / Environment**.
-10. **3D Scripting & Behaviors**.
-11. **3D Character Controller**.
-12. **3D Audio**.
-13. **3D Networking / Dedicated Server**.
-14. **Editor Workspace / UI / UX**.
-15. **Packaging / Distribution / External Project**.
-16. **Animation / Character Production**.
-17. **Final Overall 3D Integration / Documentation / Release Readiness / Engine Completion Audit**.
+1. **Rendering quality and reliability**.
+2. **Native 3D modeling and content authoring**.
+3. **Asset import and material workflows**.
+4. **Physics and collision workflows**.
+5. **Scene creation, persistence, and project management**.
+6. **Reusable scene objects and prefabs**.
+7. **Cameras and viewport navigation**.
+8. **Terrain and world authoring**.
+9. **Lighting, skies, and environments**.
+10. **Scripting and behaviors**.
+11. **Character movement and control**.
+12. **Audio authoring and runtime integration**.
+13. **Networking and dedicated servers**.
+14. **Editor usability and workspace workflows**.
+15. **Packaging, distribution, and external projects**.
+16. **Animation and character production**.
+17. **Integrated 3D development workflow and validation**.
 18. **First-class 2D engine support**.
 19. **First-class 2.5D engine support**.
-20. **Final Whole-Engine Integration / Regression / Documentation / Release-Readiness / Completion Audit** for 3D + 2D + 2.5D.
+20. **Integrated 3D, 2D, and 2.5D workflows**.
 
 First-class 2D is planned after general 3D completion. First-class 2.5D follows both. Existing 2.5D camera presets remain available within the 3D editor; they are not full 2.5D support.
 
@@ -70,10 +70,10 @@ First-class 2D is planned after general 3D completion. First-class 2.5D follows 
 flowchart LR
     Renderer[Renderer completion]
     ThreeD[Remaining 3D capabilities]
-    Final3D[Final 3D audit]
+    Final3D[Integrated 3D workflow]
     TwoD[First-class 2D]
     TwoFiveD[First-class 2.5D]
-    FinalAll[Final whole-engine audit]
+    FinalAll[Integrated whole-engine workflows]
 
     Renderer --> ThreeD --> Final3D --> TwoD --> TwoFiveD --> FinalAll
 ```
@@ -203,7 +203,7 @@ Weapons attached to hands, Audio emitters attached to world objects, cameras att
 
 ## Prefabs / Reusable Scene Objects
 
-> **Status:** Foundation; in-memory snapshot refresh and revision tracking are available; full reusable authored-object workflows depend on further scene and project authoring support.
+> **Status:** Available within the bounded 3D Prefab scope; nested composition, ambiguous membership migration, and cross-project relocation resilience remain future expansion.
 
 The runtime prefab foundation captures bounded scene snapshots and instantiates
 independent normal Henka scene objects with traceable source relationships. Its
@@ -215,14 +215,16 @@ attachment to existing gameplay hierarchies.
 The runtime API also supports transactional refresh from a live source root.
 Successful refreshes replace the bounded snapshot and increment its in-memory
  revision; newly created instances record the revision they captured. A failed
- refresh preserves the prior snapshot and a successful refresh propagates the
- supported presentation, tags, flags, bounds, logical selection ownership, and
- non-overridden manager-owned material-asset state into existing mapped
- instances. Current local scene edits are adopted before
- refresh: the root remains instance placement and changed non-root transforms
- remain instance overrides. Authoring save/reload persists supported runtime
- presentation transforms through the Scene Document; explicit serialized
- per-instance override metadata is not yet available.
+refresh preserves the prior snapshot and a successful refresh propagates the
+supported presentation, tags, flags, bounds, logical selection ownership, and
+non-overridden manager-owned material-asset state into existing mapped
+instances. Current local scene edits are adopted before refresh: the root
+remains instance placement and changed non-root transforms remain instance
+overrides. Scene Document save/reload preserves supported instance state, and
+HSCN v17 records explicit local-transform override metadata for non-root
+prefab members. Per-instance state belongs to the Scene Document, not the
+reusable `.hprefab` source asset; that asset format does not store per-instance
+material override payloads.
 Asset-backed `.hprefab` persistence, stable serialized identity and revisions,
  and Scene Document startup materialization now exist within the bounded
  runtime/project-open path. Core structural reconciliation, mapped duplication,
@@ -337,7 +339,7 @@ Engine authority, validation, transactions, identity, undo boundaries, diagnosti
 
 MCP and WebMCP continue to evolve. Henka should track stable capability-discovery, schema, permission, and transport conventions before committing the adapter.
 
-Foreground mouse and keyboard automation remains useful for testing the human interface. Ordinary machine-driven scene, authoring, inspection, and validation work should use equivalent semantic engine actions when available.
+UI automation validates reachability, hit geometry, and presentation through the graphical editor. Henka's semantic Action API can provide deterministic authoring and inspection coverage for matching operations; API results complement rather than replace user-interface and visual validation.
 
 ## Game authoring foundation
 
@@ -360,12 +362,15 @@ The Sandbox has a bounded Game Authoring V1 slice sharing Scene Document, runtim
 
 1. Broader registration and materialization of imported and externally-authored objects.
 2. More complete source, renderer/material, hierarchy, and scene/project serialization while retaining runtime-resource ownership boundaries.
-3. Numeric inspector editing, richer gameplay components, and expanded manual packaged validation.
+3. Numeric and component inspector editing beyond the current World Transform
+   Inspector, richer gameplay components, and expanded manual packaged
+   validation.
 4. Broader Inspector behavior authoring and debugger presentation.
 
 ### Planned
 
-1. Hierarchy/scene-graph authoring and a complete project serializer.
+1. Broader hierarchy and scene-graph organization beyond the current bounded
+   parent/unparent controls, plus a complete project serializer.
 2. Broader gameplay systems, input mapping, controllers, animation, and production game-debugging workflows.
 3. Mature project-level scripting workflows beyond the current bounded foundation.
 

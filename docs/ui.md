@@ -528,6 +528,14 @@ It reports native-window identity, focus, size, routed events, and close behavio
 
 The local settings file persists bounded workspace state.
 
+Editor UI Scale is a separate global editor preference. It is not owned by a
+workspace preset or named layout slot, and restoring a layout does not change
+the active 100%, 125%, 150%, or 200% scale. The legacy
+`ui.workspace.custom_layout.ui_scale` value is consulted only during the
+one-time compatibility migration when no valid canonical scale is present;
+the migrated choice is saved as `ui.editor.scale_percent`. Operating-system
+display scale remains a separate output transform.
+
 Persisted values include:
 
 - floating panel rectangles;
@@ -543,7 +551,6 @@ Persisted values include:
 - active tab;
 - selected workspace preset;
 - named layout slots;
-- UI scale;
 - panel scroll offsets;
 - group expansion;
 - Object Details group order.
@@ -562,7 +569,7 @@ Three bounded named slots are available:
 - Studio;
 - Assembly.
 
-Each stores validated topology, tab order, closed/maximized state, dock assignments, dock widths, and UI scale.
+Each stores validated topology, tab order, closed/maximized state, dock assignments, and dock widths.
 
 Restoring a slot redocks detached panels before applying the saved topology.
 
@@ -603,9 +610,12 @@ Picking and gizmo dragging use viewport-relative coordinates. Docked panel and d
 - Text layout is ASCII-oriented and lacks shaping, Unicode layout, and general word wrapping; the bundled editor font supports kerning.
 - Scale gizmo interaction is currently uniform-only in the Sandbox path.
 - Scene View cannot detach into a native window yet.
-- Full hierarchy editing is planned separately.
-- Full asset browsing is planned separately.
-- Complete numeric property editing is planned separately.
+- Broader hierarchy organization and subtree editing remain in progress beyond
+  the current bounded parent/unparent/reparent controls.
+- Broader asset management remains in progress beyond the current Asset
+  Browser workflows.
+- Numeric component and property editing remains incomplete beyond the current
+  World Transform Inspector.
 - Runtime game UI/HUD is a separate future system.
 - Human desktop QA remains required for readability, drag feel, handle clarity, panel balance, and overall workspace presentation.
 - The packaged Sandbox still opens a console window.
@@ -617,11 +627,11 @@ The UI foundation should continue growing through focused production needs.
 Planned adjacent systems include:
 
 - Runtime Game UI / HUD;
-- Scene Hierarchy / Parenting;
-- Prefabs;
+- broader hierarchy and subtree workflows beyond bounded parent/unparent/reparent;
+- advanced Prefab composition, membership migration, and cross-project relocation;
 - production asset database/browser workflows;
 - richer property editing;
-- broader typography and localization support;
+- Unicode shaping and localization support;
 - detachable Scene View after multi-window rendering and input ownership mature;
 - game-facing accessibility controls.
 

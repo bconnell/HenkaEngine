@@ -155,6 +155,9 @@ The Sandbox has a bounded Game Authoring V1 path for its registered scene object
 - The Scene Objects panel edits the persistent scene-level name through Game
   Authoring history. HSCN v16 and earlier files use the legacy `Untitled
   Scene` default; saves use v17 format.
+- New Scene creates an empty, camera-ready Scene Document without a saved
+  project-relative path. Save As creates its initial `.hscene` file; ordinary
+  Save and Reload require an active saved path.
 - Authored renderer enablement is persisted and applied as a separate runtime state from scene visibility; disabling it leaves the entity's visibility state intact while excluding it from the renderer passes.
 - Object Details exposes authored Physics and Interaction values for bound objects.
 - Supported values include primitive body/shape and trigger choices, interaction enablement, and prompt inspection.
@@ -163,6 +166,18 @@ The Sandbox has a bounded Game Authoring V1 path for its registered scene object
 ### Save and reload
 
 Save, Save As, Reload, and Open Scene use the confined, checksummed `.hscene` format. Save As creates a new project-relative scene file without overwriting an existing scene and updates the `henka.project` startup-scene selection. The scene and manifest are committed transactionally; a manifest commit failure rolls back the scene write and leaves the active authoring path unchanged. Open Scene loads an explicitly chosen project-relative scene without changing the startup-scene selection. It validates an isolated candidate before replacing the active document; a cancelled or failed load retains the current scene and authoring state. The filesystem rollback path reports the recovery location if rollback itself cannot complete.
+
+Project Open uses the startup-scene path in `henka.project`; Open Scene loads
+an explicitly chosen document without changing that selection; Reload reloads
+the currently active saved document. New, Open, and Reload transition
+immediately when authored scene and Terrain state are clean. When either is
+dirty, the editor offers Save, Discard, or Cancel. Cancel retains the active
+document, Discard proceeds without saving, and Save proceeds only after all
+applicable saves succeed. An invalid dirty-state query blocks the transition
+instead of assuming the document is clean. A dirty window-close request uses
+the same choices. When closing from Play, choosing Save stops the Play session
+before saving; ordinary scene authoring and Save/Reload mutations remain
+unavailable while Play is active.
 
 Candidate loads, rebinding, and runtime presentation updates fail closed and retain the prior authoring state on failure.
 
@@ -294,8 +309,8 @@ unchanged.
 The public Action API can also duplicate a live user-object subtree through
 the bounded prefab snapshot path, producing new scene identities while
 preserving captured hierarchy and object state; dry-run validation does not
-mutate the scene. Full editor hierarchy presentation and cross-subsystem
-history remain open.
+mutate the scene. Broader hierarchy organization and cross-subsystem history
+remain open.
 
 ## Prefabs / Reusable Scene Objects
 
