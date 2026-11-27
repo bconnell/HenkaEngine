@@ -68,7 +68,7 @@ runtime, packaging, and external-project validation.
 | 2.5D | Foundation | Camera-side foundation: perspective/side/top/isometric workflows and orthographic zoom |
 | Networking/server | Foundation | Current renderer-free runtime, dedicated host, and bounded Terrain authority paths |
 | External projects | Foundation | Current separate game/server templates with Windows validation |
-| Game authoring | Foundation | Persistent scene names; New Scene; Save/Save As; Open and Reload; Save/Discard/Cancel for dirty scene or Terrain transitions and window close; isolated runtime Play scenes |
+| Game authoring | Foundation | Persistent scene names; New Scene; Save/Save As; Open with a refreshable, paginated project `.hscene` catalog and manual relative-path entry; Reload; Save/Discard/Cancel for dirty scene or Terrain transitions and window close; isolated runtime Play scenes |
 | Prefabs | Available | Bounded reusable `.hprefab` capture/save/load/update, editor Create/Place/Update From Selected/Apply/Revert/Unpack/Delete workflow, durable supported instance overrides, and packaged/external public-API proof |
 | 2D | Planned | No dedicated 2D scope yet; renderer, sprites, layers, parallax, and animation remain open |
 | Audio | Available | Bounded resident/streamed PCM WAV, Ogg Vorbis, MP3, and FLAC playback, fixed voices, bus gains, entity spatialization, deterministic stereo PCM mixing, authored listener/editor controls, supported Lua/HenkaScript controls, and caller-pumped SDL3 output/recovery |
@@ -113,7 +113,7 @@ camera and input actions, asset management, rendering, physics, terrain,
 persistence, and a renderer-independent headless boundary. The Sandbox provides
 bounded scene authoring with New Scene, Save/Save As, Open, Reload, Save/Discard/Cancel
 protection for scene transitions and window close, and isolated Play sessions.
-Broader project-wide dirty-state protection, multi-scene navigation and
+Broader project-wide dirty-state protection, scene and project management,
 organization, gameplay authoring, character movement, scripting workflows, and
 project serialization remain in progress or planned as described in the
 capability matrix. Audio provides a bounded headless runtime, graphical Sandbox
