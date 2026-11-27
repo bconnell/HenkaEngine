@@ -288,6 +288,12 @@ henka_result sandbox3d_game_authoring_save_as(
     sandbox3d_game_authoring* authoring,
     const char* project_root,
     const char* relative_path);
+/* Reports whether the live scene differs from the last successfully saved or
+ * loaded scene. The comparison uses the same live-state synchronization and
+ * canonical document encoding as Save; an untitled scene is unsaved. */
+henka_result sandbox3d_game_authoring_has_unsaved_changes(
+    const sandbox3d_game_authoring* authoring,
+    bool* out_has_unsaved_changes);
 /* Loads the manifest-selected startup scene when henka.project is present;
  * an absent manifest falls back to the coordinator path. When the coordinator
  * was opened with an engine or asset manager, supported persisted mesh sources

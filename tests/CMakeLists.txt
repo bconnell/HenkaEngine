@@ -321,6 +321,23 @@ add_test(
     COMMAND henka_sandbox3d_game_authoring_tests
 )
 
+add_executable(henka_sandbox3d_terrain_scene_transition_tests
+    ../examples/sandbox3d/terrain_scene_transition.c
+    test_sandbox3d_terrain_scene_transition.c
+)
+
+target_link_libraries(henka_sandbox3d_terrain_scene_transition_tests
+    PRIVATE
+        henka
+)
+
+henka_enable_project_warnings(henka_sandbox3d_terrain_scene_transition_tests)
+
+add_test(
+    NAME henka_sandbox3d_terrain_scene_transition_tests
+    COMMAND henka_sandbox3d_terrain_scene_transition_tests
+)
+
 add_executable(henka_sandbox3d_game_authoring_camera_tests
     ../examples/sandbox3d/scene_document_bridge.c
     ../examples/sandbox3d/play_session.c
