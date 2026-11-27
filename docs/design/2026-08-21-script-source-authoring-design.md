@@ -1,5 +1,7 @@
 # Henka Script Source Authoring and Reload Design
 
+> **Design record:** This document records the design and requirements at the time of the original proposal. It is not a current capability inventory. See [Current Capabilities](../current-capabilities.md) for the supported implementation and [Roadmap](../roadmap.md) for planned work.
+
 ## Goal
 
 Add a bounded, reusable source-authoring seam for Lua and HenkaScript so the

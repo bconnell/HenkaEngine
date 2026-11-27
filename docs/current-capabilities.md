@@ -765,8 +765,8 @@ extrusion.
 ### Scope boundary and later work
 
 The bounded foundational Modeling scope is complete for the production paths
-listed above. The following later capabilities remain outside this campaign
-boundary:
+listed above. The following capabilities remain outside the current supported
+scope:
 
 - broader non-manifold or incompatible-normal fan handling;
 - broader topology tooling and generalized branching or batch split workflows;

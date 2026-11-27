@@ -150,10 +150,8 @@ The current 2.5D foundation is camera-side:
 - Isometric
 - Orthographic zoom
 
-These presets are existing foundations inside the current 3D editor. They do
-not define the present development priority. First-class 2.5D is deferred until
-after the current general 3D completion boundary and the later first-class 2D
-campaign. Sprites, texture regions, layered depth, parallax, animation, and
+These presets are available within the 3D editor. First-class 2.5D is planned
+after general 3D and first-class 2D support. Sprites, texture regions, layered depth, parallax, animation, and
 movement constraints remain future work. See [docs/terrain.md](docs/terrain.md)
 and [docs/roadmap.md](docs/roadmap.md).
 

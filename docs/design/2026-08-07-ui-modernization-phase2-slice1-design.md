@@ -1,5 +1,7 @@
 # Henka Engine UI Modernization Phase 2 - Slice 1 Design
 
+> **Design record:** This document records the design and requirements at the time of the original proposal. It is not a current capability inventory. See [Current Capabilities](../current-capabilities.md) for the supported implementation and [Roadmap](../roadmap.md) for planned work.
+
 ## 1. Objective
 
 Modernize the first high-value editor surfaces with reusable progressive-disclosure and property-group infrastructure.

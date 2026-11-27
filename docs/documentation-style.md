@@ -11,6 +11,12 @@ Documentation should help a reader quickly answer four questions:
 3. What remains incomplete or planned?
 4. Where can the reader find implementation, validation, or usage details?
 
+## Public audience
+
+Public product documentation describes available behavior, planned capabilities, limitations, and supported workflows. Contributor documentation may describe architecture, build requirements, design decisions, testing procedures, and contribution standards. Historical design records identify their original scope and link to current capability documentation.
+
+Private operational instructions, personal filesystem paths, private project references, maintainer-specific approval directions, and unpublished work coordination do not belong in public documentation. Express roadmap priorities as product outcomes and dependencies, not instructions to a particular contributor. Keep license notices, technical ownership contracts, security guidance, and reproducible contributor procedures intact.
+
 ## Live documentation
 
 Documentation is part of the product boundary.

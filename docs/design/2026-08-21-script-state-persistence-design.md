@@ -1,5 +1,7 @@
 # Henka V1 Behavior State Persistence Design
 
+> **Design record:** This document records the design and requirements at the time of the original proposal. It is not a current capability inventory. See [Current Capabilities](../current-capabilities.md) for the supported implementation and [Roadmap](../roadmap.md) for planned work.
+
 ## Scope
 
 Lua and HenkaScript behaviors use a shared, bounded, typed state boundary that
