@@ -270,6 +270,8 @@ typedef struct henka_engine_diagnostics
 typedef henka_result (*henka_engine_initialize_fn)(henka_engine* engine, void* user_data);
 typedef void (*henka_engine_update_fn)(henka_engine* engine, double delta_seconds, void* user_data);
 typedef void (*henka_engine_shutdown_fn)(henka_engine* engine, void* user_data);
+/* Returns true to accept a native close/Escape request, false to defer it. */
+typedef bool (*henka_engine_close_requested_fn)(henka_engine* engine, void* user_data);
 
 typedef struct henka_engine_config
 {
@@ -293,6 +295,9 @@ typedef struct henka_engine_config
     /* Appended for positional-initializer compatibility. When true, the main
      * and engine-owned tool windows are created hidden. */
     bool window_start_hidden;
+    /* Appended for positional-initializer compatibility. NULL preserves
+     * immediate native close behavior; programmatic request_exit is unchanged. */
+    henka_engine_close_requested_fn on_close_requested;
 } henka_engine_config;
 
 /*

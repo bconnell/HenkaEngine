@@ -1,6 +1,66 @@
+function Get-GameAuthoringPlayControls {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $line = Get-LastLogRegexMatch -Path $Path `
+        -Pattern '(?m)^HENKA_AUTOMATION_DIAGNOSTIC game_authoring_play_controls [^\r\n]*$'
+    if ($null -eq $line) { return $null }
+    $fields = ConvertFrom-HenkaGameAuthoringPlayControlsLine -Line $line.Value
+    if ($null -eq $fields) { return $null }
+    return ConvertTo-HenkaAutomationGeometryResult `
+        -Fields $fields `
+        -Line $line.Value `
+        -RectangleMappings @('trigger_rect=trigger', 'play_rect=play')
+}
+
+function Get-GameAuthoringPhysicsDisclosureControls {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $line = Get-LastLogRegexMatch -Path $Path `
+        -Pattern '(?m)^HENKA_AUTOMATION_DIAGNOSTIC game_authoring_physics_disclosure [^\r\n]*$'
+    if ($null -eq $line) { return $null }
+    $fields = ConvertFrom-HenkaGameAuthoringPhysicsDisclosureLine -Line $line.Value
+    if ($null -eq $fields) { return $null }
+    return ConvertTo-HenkaAutomationGeometryResult `
+        -Fields $fields `
+        -Line $line.Value `
+        -RectangleMappings @('rect=disclosure')
+}
+
 function Invoke-HenkaPackagedSceneOpenWorkflow {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][hashtable]$Context)
+
+    $dirtySceneName = $Context.ExpectedCurrentSceneName + ' Unsaved Open Draft'
+    $sceneNameControls = Get-SceneNameControls -Path $Context.StdoutPath
+    if ($null -eq $sceneNameControls) {
+        throw "The current scene name field was unavailable before the Open Scene dirty-state check."
+    }
+    Send-HenkaAutomationClickAt `
+        -EventPath $Context.AutomationInputPath `
+        -X ((Convert-HenkaAutomationNumber $sceneNameControls.Groups['field_x'].Value) +
+            ((Convert-HenkaAutomationNumber $sceneNameControls.Groups['field_width'].Value) * 0.5)) `
+        -Y ((Convert-HenkaAutomationNumber $sceneNameControls.Groups['field_y'].Value) +
+            ((Convert-HenkaAutomationNumber $sceneNameControls.Groups['field_height'].Value) * 0.5))
+    Clear-HenkaTextField -EventPath $Context.AutomationInputPath
+    $dirtyNameInputOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+    Send-HenkaAutomationText -EventPath $Context.AutomationInputPath -Text $dirtySceneName
+    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'input record=\d+ type=text' -StartingOffset $dirtyNameInputOffset -TimeoutMilliseconds 10000)) {
+        throw "The product did not consume the deliberate dirty scene-name input before the Rename action."
+    }
+    $sceneNameControls = Get-SceneNameControls -Path $Context.StdoutPath
+    if ($null -eq $sceneNameControls) {
+        throw "Fresh product-owned Scene Name geometry was unavailable immediately before Rename."
+    }
+    Send-HenkaAutomationClickAt `
+        -EventPath $Context.AutomationInputPath `
+        -X ((Convert-HenkaAutomationNumber $sceneNameControls.Groups['rename_x'].Value) +
+            ((Convert-HenkaAutomationNumber $sceneNameControls.Groups['rename_width'].Value) * 0.5)) `
+        -Y ((Convert-HenkaAutomationNumber $sceneNameControls.Groups['rename_y'].Value) +
+            ((Convert-HenkaAutomationNumber $sceneNameControls.Groups['rename_height'].Value) * 0.5))
+    $dirtyNamePattern = 'scene_name_rename result=success name=' + [Regex]::Escape($dirtySceneName) + '\.'
+    if (-not (Wait-FileContains -Path $Context.StdoutPath -Pattern $dirtyNamePattern -TimeoutMilliseconds 10000)) {
+        throw "The real Scene Name control did not publish the deliberately unsaved pre-Open edit."
+    }
 
     $actions = Get-SceneDocumentActionControls -Path $Context.StdoutPath
     $panelMatch = Get-DetailsPanelGeometry -Path $Context.StdoutPath
@@ -27,7 +87,7 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
     }
     $openFormOffset = Get-FileLengthSafe -Path $Context.StdoutPath
     Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($openButton.X + ($openButton.Width * 0.5)) -Y ($openButton.Y + ($openButton.Height * 0.5))
-    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_open_controls visible=1 .* relative_path_empty=1\.' -StartingOffset $openFormOffset -TimeoutMilliseconds 10000)) {
+    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_path_editor_controls visible=1 mode=open .* relative_path_empty=1\.' -StartingOffset $openFormOffset -TimeoutMilliseconds 10000)) {
         throw "The real Open Scene control did not open its project-relative path editor."
     }
     $pathControls = Get-SceneOpenControls -Path $Context.StdoutPath
@@ -54,62 +114,142 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
     if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'input record=\d+ type=text' -StartingOffset $pathTextOffset -TimeoutMilliseconds 10000)) {
         throw "The Open Scene path field did not consume the typed project-relative path."
     }
+    $pathControls = Get-SceneOpenControls -Path $Context.StdoutPath
+    if ($null -eq $pathControls) {
+        throw "Current product-owned Open Scene geometry was unavailable after text input."
+    }
+    # The control report is edge-triggered by geometry and its relative_path_empty
+    # field can remain from the initial empty form after text entry. Input
+    # consumption is checked above; the pending-action diagnostic below proves
+    # which path the product actually accepted.
+    $openRect = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $pathControls.Groups['open_x'].Value
+        Y = Convert-HenkaAutomationNumber $pathControls.Groups['open_y'].Value
+        Width = Convert-HenkaAutomationNumber $pathControls.Groups['open_width'].Value
+        Height = Convert-HenkaAutomationNumber $pathControls.Groups['open_height'].Value
+    }
     $pendingPattern = 'open_scene_confirmation_pending relative_path=' + [Regex]::Escape($openRelativePath) + '\.'
     $pendingOffset = Get-FileLengthSafe -Path $Context.StdoutPath
-    Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($pathRects[1].X + ($pathRects[1].Width * 0.5)) -Y ($pathRects[1].Y + ($pathRects[1].Height * 0.5))
+    Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($openRect.X + ($openRect.Width * 0.5)) -Y ($openRect.Y + ($openRect.Height * 0.5))
     if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $pendingPattern -StartingOffset $pendingOffset -TimeoutMilliseconds 10000) -or
-        -not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_transition_confirmation action=open available=1' -StartingOffset $pendingOffset -TimeoutMilliseconds 10000)) {
+        -not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_transition_dialog available=1 action=open' -StartingOffset $pendingOffset -TimeoutMilliseconds 10000)) {
         throw "The Open button did not request confirmation for the entered scene."
     }
-    $confirmation = Get-SceneTransitionConfirmationControls -Path $Context.StdoutPath -Action 'open'
+    $confirmation = Get-SceneTransitionDialogControls -Path $Context.StdoutPath -Action 'open'
     if ($null -eq $confirmation) {
         throw "Open Scene confirmation did not expose product-owned Cancel and Open hit regions."
     }
     $cancel = [pscustomobject]@{ X = Convert-HenkaAutomationNumber $confirmation.Groups['cancel_x'].Value; Y = Convert-HenkaAutomationNumber $confirmation.Groups['cancel_y'].Value; Width = Convert-HenkaAutomationNumber $confirmation.Groups['cancel_width'].Value; Height = Convert-HenkaAutomationNumber $confirmation.Groups['cancel_height'].Value }
-    $confirm = [pscustomobject]@{ X = Convert-HenkaAutomationNumber $confirmation.Groups['confirm_x'].Value; Y = Convert-HenkaAutomationNumber $confirmation.Groups['confirm_y'].Value; Width = Convert-HenkaAutomationNumber $confirmation.Groups['confirm_width'].Value; Height = Convert-HenkaAutomationNumber $confirmation.Groups['confirm_height'].Value }
+    $confirm = [pscustomobject]@{ X = Convert-HenkaAutomationNumber $confirmation.Groups['discard_x'].Value; Y = Convert-HenkaAutomationNumber $confirmation.Groups['discard_y'].Value; Width = Convert-HenkaAutomationNumber $confirmation.Groups['discard_width'].Value; Height = Convert-HenkaAutomationNumber $confirmation.Groups['discard_height'].Value }
+    $contentWidth = Convert-HenkaAutomationNumber $confirmation.Groups['content_width'].Value
+    $contentHeight = Convert-HenkaAutomationNumber $confirmation.Groups['content_height'].Value
     foreach ($rect in @($cancel, $confirm)) {
-        if ($rect.Width -le 0.0 -or $rect.Height -le 0.0 -or $rect.X -lt ($panel.X - 0.5) -or $rect.Y -lt ($panel.Y - 0.5) -or ($rect.X + $rect.Width) -gt ($panel.X + $panel.Width + 0.5) -or ($rect.Y + $rect.Height) -gt ($panel.Y + $panel.Height + 0.5)) {
-            throw "An Open Scene confirmation hit region escaped visible Object Details."
+        if ($rect.Width -le 0.0 -or $rect.Height -le 0.0 -or $rect.X -lt -0.5 -or $rect.Y -lt -0.5 -or ($rect.X + $rect.Width) -gt ($contentWidth + 0.5) -or ($rect.Y + $rect.Height) -gt ($contentHeight + 0.5)) {
+            throw "An Open Scene confirmation hit region escaped the visible application content."
         }
     }
-    $cancelledPattern = 'open_scene_confirmation_cancelled name=' + [Regex]::Escape($Context.ExpectedCurrentSceneName) + ' terrain_active=0\.'
+    $dialogState = [pscustomobject]@{
+        Name = $confirmation.Groups['active_name'].Value
+        Path = $confirmation.Groups['active_path'].Value
+        ObjectCount = $confirmation.Groups['object_count'].Value
+        SelectedEntity = $confirmation.Groups['selected_entity'].Value
+        SceneDirty = $confirmation.Groups['scene_dirty'].Value
+        TerrainDirtyRegions = $confirmation.Groups['terrain_dirty_regions'].Value
+        DirtyQueryResult = $confirmation.Groups['scene_dirty_query_result'].Value
+        TerrainDirtyQueryResult = $confirmation.Groups['terrain_dirty_query_result'].Value
+    }
+    $null = Assert-HenkaStructuredState `
+        -Description 'Open Scene dirty-document test precondition' `
+        -Actual $dialogState `
+        -MismatchClassification 'TEST_PRECONDITION_UNMET' `
+        -Expected @{
+            Name = $dirtySceneName
+            SceneDirty = '1'
+            DirtyQueryResult = '0'
+            TerrainDirtyQueryResult = '0'
+        }
     $cancelOffset = Get-FileLengthSafe -Path $Context.StdoutPath
     Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($cancel.X + ($cancel.Width * 0.5)) -Y ($cancel.Y + ($cancel.Height * 0.5))
-    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $cancelledPattern -StartingOffset $cancelOffset -TimeoutMilliseconds 10000)) {
-        throw "Canceling Open Scene did not retain the current scene."
-    }
+    $cancelledDecision = Get-HenkaSceneTransitionDecisionAfterOffset -Path $Context.StdoutPath -Action 'open' -Choice 'cancel' -StartingOffset $cancelOffset -TimeoutMilliseconds 10000
+    $null = Assert-HenkaStructuredState `
+        -Description 'Cancel Open Scene preserves the exact prior document and selection' `
+        -Actual $cancelledDecision `
+        -Expected @{
+            SceneRetained = '1'
+            SceneDirty = $dialogState.SceneDirty
+            TerrainDirtyRegions = $dialogState.TerrainDirtyRegions
+            ActiveName = $dialogState.Name
+            ActivePath = $dialogState.Path
+            ObjectCount = $dialogState.ObjectCount
+            SelectedEntity = $dialogState.SelectedEntity
+        }
     $retryOffset = Get-FileLengthSafe -Path $Context.StdoutPath
-    Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($pathRects[1].X + ($pathRects[1].Width * 0.5)) -Y ($pathRects[1].Y + ($pathRects[1].Height * 0.5))
+    $pathControls = Get-SceneOpenControls -Path $Context.StdoutPath
+    if ($null -eq $pathControls) {
+        throw "Product-owned Open Scene geometry was unavailable after canceling the confirmation."
+    }
+    $retryOpenRect = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $pathControls.Groups['open_x'].Value
+        Y = Convert-HenkaAutomationNumber $pathControls.Groups['open_y'].Value
+        Width = Convert-HenkaAutomationNumber $pathControls.Groups['open_width'].Value
+        Height = Convert-HenkaAutomationNumber $pathControls.Groups['open_height'].Value
+    }
+    $retryPanel = Get-DetailsPanelGeometry -Path $Context.StdoutPath
+    if ($null -eq $retryPanel) { throw "Current Object Details bounds were unavailable before retrying Open Scene." }
+    $retryPanelRect = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $retryPanel.Groups['x'].Value
+        Y = Convert-HenkaAutomationNumber $retryPanel.Groups['y'].Value
+        Width = Convert-HenkaAutomationNumber $retryPanel.Groups['width'].Value
+        Height = Convert-HenkaAutomationNumber $retryPanel.Groups['height'].Value
+    }
+    if ($retryOpenRect.Width -le 0.0 -or $retryOpenRect.Height -le 0.0 -or
+        $retryOpenRect.X -lt ($retryPanelRect.X - 0.5) -or $retryOpenRect.Y -lt ($retryPanelRect.Y - 0.5) -or
+        ($retryOpenRect.X + $retryOpenRect.Width) -gt ($retryPanelRect.X + $retryPanelRect.Width + 0.5) -or
+        ($retryOpenRect.Y + $retryOpenRect.Height) -gt ($retryPanelRect.Y + $retryPanelRect.Height + 0.5)) {
+        throw "The refreshed Open Scene retry hit region escaped visible Object Details."
+    }
+    Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($retryOpenRect.X + ($retryOpenRect.Width * 0.5)) -Y ($retryOpenRect.Y + ($retryOpenRect.Height * 0.5))
     if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $pendingPattern -StartingOffset $retryOffset -TimeoutMilliseconds 10000) -or
-        -not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_transition_confirmation action=open available=1' -StartingOffset $retryOffset -TimeoutMilliseconds 10000)) {
+        -not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_transition_dialog available=1 action=open' -StartingOffset $retryOffset -TimeoutMilliseconds 10000)) {
         throw "Canceling confirmation did not retain the entered path for retry."
     }
-    $confirmation = Get-SceneTransitionConfirmationControls -Path $Context.StdoutPath -Action 'open'
+    $confirmation = Get-SceneTransitionDialogControls -Path $Context.StdoutPath -Action 'open'
     if ($null -eq $confirmation) {
         throw "The retried Open Scene confirmation did not expose its controls."
     }
-    $confirmX = Convert-HenkaAutomationNumber $confirmation.Groups['confirm_x'].Value
-    $confirmY = Convert-HenkaAutomationNumber $confirmation.Groups['confirm_y'].Value
-    $confirmWidth = Convert-HenkaAutomationNumber $confirmation.Groups['confirm_width'].Value
-    $confirmHeight = Convert-HenkaAutomationNumber $confirmation.Groups['confirm_height'].Value
-    $attemptPattern = 'scene_document_persistence action=scene_open_attempt result=(?<result>-?\d+) relative_path_empty=0 active_name=' + [Regex]::Escape($Context.SceneName) + ' active_relative_path=' + [Regex]::Escape($openRelativePath) + ' active_document_object_count=(?<count>\d+) selection_present=(?<selection>[01])\.'
+    $confirmX = Convert-HenkaAutomationNumber $confirmation.Groups['discard_x'].Value
+    $confirmY = Convert-HenkaAutomationNumber $confirmation.Groups['discard_y'].Value
+    $confirmWidth = Convert-HenkaAutomationNumber $confirmation.Groups['discard_width'].Value
+    $confirmHeight = Convert-HenkaAutomationNumber $confirmation.Groups['discard_height'].Value
     $openAttemptOffset = Get-FileLengthSafe -Path $Context.StdoutPath
     Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($confirmX + ($confirmWidth * 0.5)) -Y ($confirmY + ($confirmHeight * 0.5))
-    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $attemptPattern -StartingOffset $openAttemptOffset -TimeoutMilliseconds 15000)) {
-        throw "Open Scene did not publish the authoritative active document state."
+    $openedAttempt = Get-HenkaSceneOpenAttemptAfterOffset -Path $Context.StdoutPath -StartingOffset $openAttemptOffset -TimeoutMilliseconds 15000
+    $null = Assert-HenkaStructuredState `
+        -Description 'Open Scene active-document result after the real confirmation click' `
+        -Actual $openedAttempt `
+        -Expected @{
+            Result = '0'
+            RelativePathEmpty = '0'
+            ActiveName = $Context.SceneName
+            ActiveRelativePath = $openRelativePath
+        }
+    if ([int]$openedAttempt.ActiveDocumentObjectCount -le 0) {
+        throw "[HENKA_VALIDATION_CLASS=PRODUCT_STATE_MISMATCH] Open Scene reported an empty active document after loading the saved scene."
     }
-    $openedAttempt = Get-LastLogRegexMatch -Path $Context.StdoutPath -Pattern $attemptPattern
-    if ($null -eq $openedAttempt -or [int]$openedAttempt.Groups['result'].Value -ne 0 -or [int]$openedAttempt.Groups['count'].Value -le 0) {
-        throw "Open Scene did not load the previously saved named scene as a nonempty document."
+    if ($openedAttempt.SelectionPresent -notin @('0', '1')) {
+        throw "[HENKA_VALIDATION_CLASS=UNCLASSIFIED_OBSERVATION_GAP] Open Scene reported an invalid selection-presence value."
     }
-    $openedPattern = 'scene_document_persistence action=scene_opened name=' + [Regex]::Escape($Context.SceneName) + ' relative_path=' + [Regex]::Escape($openRelativePath) + ' relative_path_empty=0 document_object_count=(?<count>\d+)'
-    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $openedPattern -StartingOffset $openAttemptOffset -TimeoutMilliseconds 10000)) {
-        throw "Open Scene did not report the canonical loaded scene identity and path."
-    }
-    $openedDocument = Get-LastLogRegexMatch -Path $Context.StdoutPath -Pattern $openedPattern
-    if ($null -eq $openedDocument -or [int]$openedDocument.Groups['count'].Value -ne [int]$openedAttempt.Groups['count'].Value) {
-        throw "The loaded document count disagreed with the active document count."
-    }
+    $openedDocument = Get-HenkaSceneOpenedAfterOffset -Path $Context.StdoutPath -StartingOffset $openAttemptOffset -TimeoutMilliseconds 10000
+    $null = Assert-HenkaStructuredState `
+        -Description 'Open Scene completion diagnostic agrees with the active document' `
+        -Actual $openedDocument `
+        -Expected @{
+            Action = 'scene_opened'
+            Name = $openedAttempt.ActiveName
+            RelativePath = $openedAttempt.ActiveRelativePath
+            RelativePathEmpty = '0'
+            DocumentObjectCount = $openedAttempt.ActiveDocumentObjectCount
+        }
     if ((Get-FileHash -LiteralPath $Context.SavedScenePath -Algorithm SHA256).Hash -ne $Context.SavedSceneHash -or (Get-FileHash -LiteralPath $Context.ProjectManifestPath -Algorithm SHA256).Hash -ne $Context.ProjectManifestHash) {
         throw "Opening the explicit scene changed its source file or project startup manifest."
     }
@@ -124,7 +264,9 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
     if ($null -eq $row) {
         throw "The opened scene's product-owned Scene Objects row geometry could not be read."
     }
-    $rowEntity = [ulong]::Parse($row.Groups['entity'].Value)
+    # Use the CLR type name because the [ulong] accelerator is not available
+    # consistently in the Windows PowerShell 5.1 validation host.
+    $rowEntity = [System.UInt64]::Parse($row.Groups['entity'].Value)
     $rowX = Convert-HenkaAutomationNumber $row.Groups['x'].Value
     $rowY = Convert-HenkaAutomationNumber $row.Groups['y'].Value
     $rowWidth = Convert-HenkaAutomationNumber $row.Groups['width'].Value
@@ -191,7 +333,7 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
     if ($null -eq $newSelectedRow) {
         throw "The product-created cube's selected Scene Objects row could not be read."
     }
-    $cameraTargetEntity = [ulong]::Parse($newSelectedRow.Groups['entity'].Value)
+    $cameraTargetEntity = [System.UInt64]::Parse($newSelectedRow.Groups['entity'].Value)
     $cameraTargetName = $newSelectedRow.Groups['name'].Value
     $cameraTargetRowX = Convert-HenkaAutomationNumber $newSelectedRow.Groups['x'].Value
     $cameraTargetRowY = Convert-HenkaAutomationNumber $newSelectedRow.Groups['y'].Value
@@ -337,7 +479,7 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
     $focusScreenshot = Join-Path $Context.RuntimeDirectory "open-scene-camera-focused.png"
     $null = Save-HenkaProductFramebufferScreenshot -Process $Context.Process -StdoutPath $Context.StdoutPath -CaptureDirectory $Context.FrameCaptureDirectory -RequestFile $Context.FrameCaptureRequestPath -Description "Packaged Open Scene camera focused on selected entity" -DestinationPath $focusScreenshot
 
-    $expectedLiveCount = [int]$openedAttempt.Groups['count'].Value + 1
+    $expectedLiveCount = [int]$openedAttempt.ActiveDocumentObjectCount + 1
     $actionsPattern = 'scene_document_action_controls visible=1 document_object_count=' + $expectedLiveCount + ' selection_present=1 relative_path_empty=0 .* open_scene_rect='
     if (-not (Wait-FileContainsAfterOffset `
             -Path $Context.StdoutPath `
@@ -364,9 +506,72 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
     if ($openButton.Width -le 0.0 -or $openButton.Height -le 0.0 -or $openButton.X -lt ($panel.X - 0.5) -or $openButton.Y -lt ($panel.Y - 0.5) -or ($openButton.X + $openButton.Width) -gt ($panel.X + $panel.Width + 0.5) -or ($openButton.Y + $openButton.Height) -gt ($panel.Y + $panel.Height + 0.5)) {
         throw "The restored Open Scene hit region escaped visible Object Details."
     }
+    $actions = Get-SceneDocumentActionControls -Path $Context.StdoutPath
+    $panelMatch = Get-DetailsPanelGeometry -Path $Context.StdoutPath
+    if ($null -eq $actions -or $null -eq $panelMatch -or
+        $actions.Groups['relative_path_empty'].Value -ne '0') {
+        throw "The invalid-path negative control requires a saved active scene."
+    }
+    $savePanel = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $panelMatch.Groups['x'].Value
+        Y = Convert-HenkaAutomationNumber $panelMatch.Groups['y'].Value
+        Width = Convert-HenkaAutomationNumber $panelMatch.Groups['width'].Value
+        Height = Convert-HenkaAutomationNumber $panelMatch.Groups['height'].Value
+    }
+    $saveButton = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $actions.Groups['save_x'].Value
+        Y = Convert-HenkaAutomationNumber $actions.Groups['save_y'].Value
+        Width = Convert-HenkaAutomationNumber $actions.Groups['save_width'].Value
+        Height = Convert-HenkaAutomationNumber $actions.Groups['save_height'].Value
+    }
+    $sceneHashBeforeFixtureSave = (Get-FileHash -LiteralPath $Context.SavedScenePath -Algorithm SHA256).Hash
+    $fixtureSaveOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+    Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($saveButton.X + ($saveButton.Width * 0.5)) -Y ($saveButton.Y + ($saveButton.Height * 0.5))
+    $fixtureSavedPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=saved name=' + [Regex]::Escape($Context.SceneName) + '\.'
+    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $fixtureSavedPattern -StartingOffset $fixtureSaveOffset -TimeoutMilliseconds 15000)) {
+        throw "The active edited scene was not saved through the real Save control before the clean-scene invalid-path check."
+    }
+    $Context.SavedSceneHash = (Get-FileHash -LiteralPath $Context.SavedScenePath -Algorithm SHA256).Hash
+    if ($Context.SavedSceneHash -eq $sceneHashBeforeFixtureSave) {
+        throw "Saving the product-authored Cube did not update the saved scene fixture."
+    }
+    if (-not (Test-Path -LiteralPath $Context.ProjectManifestPath -PathType Leaf)) {
+        throw "The successful fixture Save did not leave the project startup-scene manifest available."
+    }
+    $fixtureManifestText = Get-Content -LiteralPath $Context.ProjectManifestPath -Raw
+    $fixtureStartupScene = [Regex]::Match($fixtureManifestText, '(?m)^startup_scene=(?<path>[^\r\n]+)$')
+    if (-not $fixtureStartupScene.Success -or
+        $fixtureStartupScene.Groups['path'].Value -ne $openRelativePath) {
+        throw "The fixture Save did not establish the expected startup scene '$openRelativePath' before the invalid Open negative control."
+    }
+    $Context.ProjectManifestHash = (Get-FileHash -LiteralPath $Context.ProjectManifestPath -Algorithm SHA256).Hash
+
+    $actions = Get-SceneDocumentActionControls -Path $Context.StdoutPath
+    $panelMatch = Get-DetailsPanelGeometry -Path $Context.StdoutPath
+    if ($null -eq $actions -or $null -eq $panelMatch) {
+        throw "Fresh product geometry was unavailable before opening the invalid-path form."
+    }
+    $panel = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $panelMatch.Groups['x'].Value
+        Y = Convert-HenkaAutomationNumber $panelMatch.Groups['y'].Value
+        Width = Convert-HenkaAutomationNumber $panelMatch.Groups['width'].Value
+        Height = Convert-HenkaAutomationNumber $panelMatch.Groups['height'].Value
+    }
+    $openButton = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $actions.Groups['open_scene_x'].Value
+        Y = Convert-HenkaAutomationNumber $actions.Groups['open_scene_y'].Value
+        Width = Convert-HenkaAutomationNumber $actions.Groups['open_scene_width'].Value
+        Height = Convert-HenkaAutomationNumber $actions.Groups['open_scene_height'].Value
+    }
+    if ($openButton.Width -le 0.0 -or $openButton.Height -le 0.0 -or
+        $openButton.X -lt ($panel.X - 0.5) -or $openButton.Y -lt ($panel.Y - 0.5) -or
+        ($openButton.X + $openButton.Width) -gt ($panel.X + $panel.Width + 0.5) -or
+        ($openButton.Y + $openButton.Height) -gt ($panel.Y + $panel.Height + 0.5)) {
+        throw "The fresh Open Scene hit region escaped visible Object Details."
+    }
     $invalidFormOffset = Get-FileLengthSafe -Path $Context.StdoutPath
     Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($openButton.X + ($openButton.Width * 0.5)) -Y ($openButton.Y + ($openButton.Height * 0.5))
-    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_open_controls visible=1 .* relative_path_empty=1\.' -StartingOffset $invalidFormOffset -TimeoutMilliseconds 10000)) {
+    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_path_editor_controls visible=1 mode=open .* relative_path_empty=1\.' -StartingOffset $invalidFormOffset -TimeoutMilliseconds 10000)) {
         throw "Open Scene did not reopen for the invalid-path negative control."
     }
     $pathControls = Get-SceneOpenControls -Path $Context.StdoutPath
@@ -378,41 +583,430 @@ function Invoke-HenkaPackagedSceneOpenWorkflow {
     Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($pathRect.X + ($pathRect.Width * 0.5)) -Y ($pathRect.Y + ($pathRect.Height * 0.5))
     Clear-HenkaTextField -EventPath $Context.AutomationInputPath
     $invalidPath = '../escape.hscene'
-    $invalidPendingPattern = 'open_scene_confirmation_pending relative_path=' + [Regex]::Escape($invalidPath) + '\.'
     $invalidTextOffset = Get-FileLengthSafe -Path $Context.StdoutPath
     Send-HenkaAutomationText -EventPath $Context.AutomationInputPath -Text $invalidPath
     if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'input record=\d+ type=text' -StartingOffset $invalidTextOffset -TimeoutMilliseconds 10000)) {
         throw "The invalid Open Scene path text was not consumed by the product."
     }
+    $pathControls = Get-SceneOpenControls -Path $Context.StdoutPath
+    if ($null -eq $pathControls) {
+        throw "Fresh Open Scene path geometry was unavailable after entering the invalid path."
+    }
+    $openRect = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $pathControls.Groups['open_x'].Value
+        Y = Convert-HenkaAutomationNumber $pathControls.Groups['open_y'].Value
+        Width = Convert-HenkaAutomationNumber $pathControls.Groups['open_width'].Value
+        Height = Convert-HenkaAutomationNumber $pathControls.Groups['open_height'].Value
+    }
     $invalidPendingOffset = Get-FileLengthSafe -Path $Context.StdoutPath
     Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($openRect.X + ($openRect.Width * 0.5)) -Y ($openRect.Y + ($openRect.Height * 0.5))
-    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $invalidPendingPattern -StartingOffset $invalidPendingOffset -TimeoutMilliseconds 10000) -or
-        -not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_transition_confirmation action=open available=1' -StartingOffset $invalidPendingOffset -TimeoutMilliseconds 10000)) {
-        throw "The path editor did not pass the invalid path unchanged to confirmation."
+    $rejected = Get-HenkaSceneOpenAttemptAfterOffset -Path $Context.StdoutPath -StartingOffset $invalidPendingOffset -TimeoutMilliseconds 15000
+    if ($null -eq $rejected) {
+        throw "The invalid Open request did not publish a complete product-owned scene-open result after the current action boundary."
     }
-    $confirmation = Get-SceneTransitionConfirmationControls -Path $Context.StdoutPath -Action 'open'
-    if ($null -eq $confirmation) {
-        throw "The invalid path request did not expose the real confirmation controls."
+    if (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_transition_prompt_pending action=open' -StartingOffset $invalidPendingOffset -TimeoutMilliseconds 100) {
+        throw "A clean scene incorrectly received an unsaved-change prompt for a rejected Open path."
     }
-    $confirmX = Convert-HenkaAutomationNumber $confirmation.Groups['confirm_x'].Value
-    $confirmY = Convert-HenkaAutomationNumber $confirmation.Groups['confirm_y'].Value
-    $confirmWidth = Convert-HenkaAutomationNumber $confirmation.Groups['confirm_width'].Value
-    $confirmHeight = Convert-HenkaAutomationNumber $confirmation.Groups['confirm_height'].Value
-    $rejectedPattern = 'scene_document_persistence action=scene_open_attempt result=(?<result>-?\d+) relative_path_empty=0 active_name=' + [Regex]::Escape($Context.SceneName) + ' active_relative_path=' + [Regex]::Escape($openRelativePath) + ' active_document_object_count=(?<count>\d+) selection_present=(?<selection>[01])\.'
-    $rejectedOffset = Get-FileLengthSafe -Path $Context.StdoutPath
-    Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($confirmX + ($confirmWidth * 0.5)) -Y ($confirmY + ($confirmHeight * 0.5))
-    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $rejectedPattern -StartingOffset $rejectedOffset -TimeoutMilliseconds 15000)) {
-        throw "Invalid Open Scene did not report the retained authoritative document state."
+    if ([int]$rejected.Result -eq 0 -or
+        $rejected.RelativePathEmpty -ne '0' -or
+        $rejected.ActiveName -ne $Context.SceneName -or
+        $rejected.ActiveRelativePath -ne $openRelativePath -or
+        [int]$rejected.ActiveDocumentObjectCount -ne $loadedCount -or
+        $rejected.SelectionPresent -ne $loadedSelection) {
+        throw "Rejected Open changed authoritative active scene state: result=$($rejected.Result) path_empty=$($rejected.RelativePathEmpty) name='$($rejected.ActiveName)' path='$($rejected.ActiveRelativePath)' objects=$($rejected.ActiveDocumentObjectCount) selection=$($rejected.SelectionPresent); expected the pre-operation scene/document/selection state to remain unchanged."
     }
-    $rejected = Get-LastLogRegexMatch -Path $Context.StdoutPath -Pattern $rejectedPattern
-    if ($null -eq $rejected -or [int]$rejected.Groups['result'].Value -eq 0 -or [int]$rejected.Groups['count'].Value -ne $loadedCount -or $rejected.Groups['selection'].Value -ne $loadedSelection) {
-        throw "The invalid Open Scene candidate partially changed the live document or selection."
+    $invalidTargetPath = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $Context.SavedScenePath) '..\escape.hscene'))
+    if (Test-Path -LiteralPath $invalidTargetPath) {
+        throw "Rejected Open created an out-of-project scene file at '$invalidTargetPath'."
     }
-    if ((Get-FileHash -LiteralPath $Context.SavedScenePath -Algorithm SHA256).Hash -ne $Context.SavedSceneHash -or (Get-FileHash -LiteralPath $Context.ProjectManifestPath -Algorithm SHA256).Hash -ne $Context.ProjectManifestHash) {
-        throw "Rejected Open Scene changed the source file or project startup manifest."
+    $actualSavedSceneHash = (Get-FileHash -LiteralPath $Context.SavedScenePath -Algorithm SHA256).Hash
+    if ($actualSavedSceneHash -ne $Context.SavedSceneHash) {
+        throw "Rejected Open modified the saved source scene (expected SHA256 $($Context.SavedSceneHash), actual $actualSavedSceneHash)."
+    }
+    $actualProjectManifestHash = (Get-FileHash -LiteralPath $Context.ProjectManifestPath -Algorithm SHA256).Hash
+    if ($actualProjectManifestHash -ne $Context.ProjectManifestHash) {
+        throw "Rejected Open modified the startup manifest (expected SHA256 $($Context.ProjectManifestHash), actual $actualProjectManifestHash)."
     }
     $failureScreenshot = Join-Path $Context.RuntimeDirectory "open-scene-rejected.png"
     $null = Save-HenkaProductFramebufferScreenshot -Process $Context.Process -StdoutPath $Context.StdoutPath -CaptureDirectory $Context.FrameCaptureDirectory -RequestFile $Context.FrameCaptureRequestPath -Description "Packaged rejected Open Scene path" -DestinationPath $failureScreenshot
-    Write-Output "[pass] Packaged Open Scene used the real path editor and confirmation; the named scene loaded with $loadedCount authored objects, a real Scene Objects row selected entity $rowEntity, and its real Focus Camera control changed the product camera. An escaping path was rejected without changing the live document, selection, or files."
+    $invalidCancelOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+    $pathControls = Get-SceneOpenControls -Path $Context.StdoutPath
+    if ($null -eq $pathControls) {
+        throw "Fresh Open Scene path geometry was unavailable before canceling the rejected path."
+    }
+    $cancelRect = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $pathControls.Groups['cancel_x'].Value
+        Y = Convert-HenkaAutomationNumber $pathControls.Groups['cancel_y'].Value
+        Width = Convert-HenkaAutomationNumber $pathControls.Groups['cancel_width'].Value
+        Height = Convert-HenkaAutomationNumber $pathControls.Groups['cancel_height'].Value
+    }
+    Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($cancelRect.X + ($cancelRect.Width * 0.5)) -Y ($cancelRect.Y + ($cancelRect.Height * 0.5))
+    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'scene_document_action_controls visible=1 ' -StartingOffset $invalidCancelOffset -TimeoutMilliseconds 10000)) {
+        throw "Canceling the rejected Open path did not return to the current scene controls."
+    }
+
+    $closeDraftName = 'Close Draft'
+    # Scene Name geometry is published only when its bounds change. Closing the
+    # path overlay restores the scene action controls, but the unchanged name
+    # rectangle is intentionally not emitted again. Read its latest
+    # product-owned geometry immediately before the next real interaction.
+    $closeNameControls = Get-SceneNameControls -Path $Context.StdoutPath
+    if ($null -eq $closeNameControls) {
+        throw "The loaded scene name control was unavailable for the close-protection workflow."
+    }
+    Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ((Convert-HenkaAutomationNumber $closeNameControls.Groups['field_x'].Value) + ((Convert-HenkaAutomationNumber $closeNameControls.Groups['field_width'].Value) * 0.5)) -Y ((Convert-HenkaAutomationNumber $closeNameControls.Groups['field_y'].Value) + ((Convert-HenkaAutomationNumber $closeNameControls.Groups['field_height'].Value) * 0.5))
+    Clear-HenkaTextField -EventPath $Context.AutomationInputPath
+    $closeDraftInputOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+    Send-HenkaAutomationText -EventPath $Context.AutomationInputPath -Text $closeDraftName
+    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern 'input record=\d+ type=text' -StartingOffset $closeDraftInputOffset -TimeoutMilliseconds 10000)) {
+        throw "The product did not consume the deliberate close-test name before the Rename action."
+    }
+    $closeNameControls = Get-SceneNameControls -Path $Context.StdoutPath
+    if ($null -eq $closeNameControls) {
+        throw "Fresh product-owned Scene Name geometry was unavailable immediately before the close-test Rename."
+    }
+    Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ((Convert-HenkaAutomationNumber $closeNameControls.Groups['rename_x'].Value) + ((Convert-HenkaAutomationNumber $closeNameControls.Groups['rename_width'].Value) * 0.5)) -Y ((Convert-HenkaAutomationNumber $closeNameControls.Groups['rename_y'].Value) + ((Convert-HenkaAutomationNumber $closeNameControls.Groups['rename_height'].Value) * 0.5))
+    $closeDraftPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_name_rename result=success name=' + [Regex]::Escape($closeDraftName) + '\.'
+    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $closeDraftPattern -StartingOffset $invalidCancelOffset -TimeoutMilliseconds 10000)) {
+        throw "The real Scene Name control did not publish the deliberate unsaved close-test edit."
+    }
+    $savedSceneHashBeforeClose = (Get-FileHash -LiteralPath $Context.SavedScenePath -Algorithm SHA256).Hash
+
+    $closeRequestOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+    if (-not $Context.Process.CloseMainWindow()) {
+        throw "Windows did not deliver the normal close request to the packaged Henka window."
+    }
+    $closePendingPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=close_confirmation_pending name=' + [Regex]::Escape($closeDraftName) + '\.'
+    $closeDirtyPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_prompt_pending action=close dirty=1 scene_dirty=1 scene_dirty_query_result=0 terrain_dirty_query_result=0 terrain_dirty_regions=0 target_path=' + [Regex]::Escape($openRelativePath) + '\.'
+    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $closePendingPattern -StartingOffset $closeRequestOffset -TimeoutMilliseconds 10000) -or
+        -not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $closeDirtyPattern -StartingOffset $closeRequestOffset -TimeoutMilliseconds 10000)) {
+        throw "The normal window-close message did not produce the expected dirty-scene protection state."
+    }
+    $closeDialog = Get-SceneTransitionDialogControls -Path $Context.StdoutPath -Action 'close'
+    if ($null -eq $closeDialog -or $closeDialog.Groups['active_name'].Value -ne $closeDraftName -or
+        $closeDialog.Groups['active_path'].Value -ne $openRelativePath -or
+        $closeDialog.Groups['scene_dirty'].Value -ne '1' -or
+        [int]$closeDialog.Groups['terrain_dirty_regions'].Value -ne 0) {
+        throw "The close prompt did not expose the current canonical scene and separate dirty-state authorities."
+    }
+    $closeContentWidth = [int]$closeDialog.Groups['content_width'].Value
+    $closeContentHeight = [int]$closeDialog.Groups['content_height'].Value
+    $closeCancel = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $closeDialog.Groups['cancel_x'].Value
+        Y = Convert-HenkaAutomationNumber $closeDialog.Groups['cancel_y'].Value
+        Width = Convert-HenkaAutomationNumber $closeDialog.Groups['cancel_width'].Value
+        Height = Convert-HenkaAutomationNumber $closeDialog.Groups['cancel_height'].Value
+    }
+    if ($closeCancel.Width -le 0.0 -or $closeCancel.Height -le 0.0 -or
+        $closeCancel.X -lt -0.5 -or $closeCancel.Y -lt -0.5 -or
+        ($closeCancel.X + $closeCancel.Width) -gt ($closeContentWidth + 0.5) -or
+        ($closeCancel.Y + $closeCancel.Height) -gt ($closeContentHeight + 0.5)) {
+        throw "The close dialog Cancel target escaped the visible application content."
+    }
+    $closePromptScreenshot = Join-Path $Context.RuntimeDirectory 'close-unsaved-scene.png'
+    $null = Save-HenkaProductFramebufferScreenshot -Process $Context.Process -StdoutPath $Context.StdoutPath -CaptureDirectory $Context.FrameCaptureDirectory -RequestFile $Context.FrameCaptureRequestPath -Description 'Packaged close unsaved-scene prompt' -DestinationPath $closePromptScreenshot
+    $closeCancelOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+    Send-HenkaAutomationClickAt -EventPath $Context.AutomationInputPath -X ($closeCancel.X + ($closeCancel.Width * 0.5)) -Y ($closeCancel.Y + ($closeCancel.Height * 0.5))
+    $closeCancelledDecision = Get-HenkaSceneTransitionDecisionAfterOffset -Path $Context.StdoutPath -Action 'close' -Choice 'cancel' -StartingOffset $closeCancelOffset -TimeoutMilliseconds 10000
+    if ($null -eq $closeCancelledDecision -or
+        $closeCancelledDecision.SceneRetained -ne '1' -or
+        $closeCancelledDecision.SceneDirty -ne $closeDialog.Groups['scene_dirty'].Value -or
+        $closeCancelledDecision.TerrainDirtyRegions -ne $closeDialog.Groups['terrain_dirty_regions'].Value -or
+        $closeCancelledDecision.ActiveName -ne $closeDraftName -or
+        $closeCancelledDecision.ActivePath -ne $openRelativePath -or
+        $closeCancelledDecision.ObjectCount -ne $closeDialog.Groups['object_count'].Value -or
+        $closeCancelledDecision.SelectedEntity -ne $closeDialog.Groups['selected_entity'].Value) {
+        throw "Canceling the window-close prompt did not retain the same scene identity and selection."
+    }
+    $Context.Process.Refresh()
+    if ($Context.Process.HasExited) {
+        throw "Canceling the window-close prompt still exited the packaged editor."
+    }
+
+    if ($loadedCount -lt 1 -or $loadedSelection -ne '1') {
+        throw "[FIXTURE/PRECONDITION] Close Save while Play requires the already-proven opened scene with its authored Cube selected."
+    }
+    $expectedPlayEntity = [string]$closeCancelledDecision.SelectedEntity
+    if ($expectedPlayEntity -notmatch '^\d+$' -or $expectedPlayEntity -eq '0') {
+        throw "[FIXTURE/PRECONDITION] The retained scene did not report one canonical selected entity for the Play workflow."
+    }
+    $physicsDisclosurePattern = 'HENKA_AUTOMATION_DIAGNOSTIC game_authoring_physics_disclosure [^\r\n]*\.'
+    $playControlsPattern = 'HENKA_AUTOMATION_DIAGNOSTIC game_authoring_play_controls [^\r\n]*\.'
+    $playControls = $null
+    $detailsForPlay = $null
+    $playControlsFresh = $false
+    $physicsDisclosureOpened = $false
+    for ($navigation = 0; $navigation -lt 24; ++$navigation) {
+        $physicsDisclosure = Get-GameAuthoringPhysicsDisclosureControls -Path $Context.StdoutPath
+        if ($null -eq $physicsDisclosure -or $null -eq $physicsDisclosure.Fields) {
+            throw "[HARNESS/OBSERVATION] The product did not report current Physics disclosure state and geometry."
+        }
+        if ($physicsDisclosure.Fields.entity_id -ne $expectedPlayEntity) {
+            throw "[PRODUCT/STATE] Physics disclosure telemetry belongs to entity $($physicsDisclosure.Fields.entity_id), not retained selection $expectedPlayEntity."
+        }
+        if ($physicsDisclosure.Fields.expanded -eq '1') {
+            $physicsDisclosureOpened = $true
+        }
+        $detailsForPlay = Get-DetailsPanelGeometry -Path $Context.StdoutPath
+        if ($null -eq $detailsForPlay) {
+            throw "[HARNESS/OBSERVATION] Object Details geometry was unavailable while opening Physics and locating Play."
+        }
+        $detailsRect = [pscustomobject]@{
+            X = Convert-HenkaAutomationNumber $detailsForPlay.Groups['x'].Value
+            Y = Convert-HenkaAutomationNumber $detailsForPlay.Groups['y'].Value
+            Width = Convert-HenkaAutomationNumber $detailsForPlay.Groups['width'].Value
+            Height = Convert-HenkaAutomationNumber $detailsForPlay.Groups['height'].Value
+        }
+        $physicsRect = [pscustomobject]@{
+            X = Convert-HenkaAutomationNumber $physicsDisclosure.Groups['disclosure_x'].Value
+            Y = Convert-HenkaAutomationNumber $physicsDisclosure.Groups['disclosure_y'].Value
+            Width = Convert-HenkaAutomationNumber $physicsDisclosure.Groups['disclosure_width'].Value
+            Height = Convert-HenkaAutomationNumber $physicsDisclosure.Groups['disclosure_height'].Value
+        }
+        $physicsRectVisible = $physicsRect.Width -gt 0.0 -and $physicsRect.Height -gt 0.0 -and
+            $physicsRect.X -ge ($detailsRect.X - 0.5) -and
+            $physicsRect.Y -ge ($detailsRect.Y - 0.5) -and
+            ($physicsRect.X + $physicsRect.Width) -le ($detailsRect.X + $detailsRect.Width + 0.5) -and
+            ($physicsRect.Y + $physicsRect.Height) -le ($detailsRect.Y + $detailsRect.Height + 0.5)
+
+        if ($physicsDisclosure.Fields.expanded -eq '0' -and $physicsRectVisible) {
+            $physicsToggleOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+            Send-HenkaObservedAutomationClick `
+                -EventPath $Context.AutomationInputPath `
+                -StdoutPath $Context.StdoutPath `
+                -X ($physicsRect.X + ($physicsRect.Width * 0.5)) `
+                -Y ($physicsRect.Y + ($physicsRect.Height * 0.5)) `
+                -Purpose 'Game Authoring Physics disclosure' | Out-Null
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $Context.StdoutPath `
+                    -Pattern $physicsDisclosurePattern `
+                    -StartingOffset $physicsToggleOffset `
+                    -TimeoutMilliseconds 5000)) {
+                throw "[HARNESS/OBSERVATION] The Physics click was consumed, but the product did not report the disclosure state transition."
+            }
+            $physicsAfterClick = Get-GameAuthoringPhysicsDisclosureControls -Path $Context.StdoutPath
+            if ($null -eq $physicsAfterClick -or
+                $physicsAfterClick.Fields.entity_id -ne $expectedPlayEntity -or
+                $physicsAfterClick.Fields.expanded -ne '1') {
+                throw "[PRODUCT/UI] The real Physics disclosure click did not expand Physics for the retained selected entity."
+            }
+            $physicsDisclosureOpened = $true
+            if (Wait-FileContainsAfterOffset `
+                    -Path $Context.StdoutPath `
+                    -Pattern $playControlsPattern `
+                    -StartingOffset $physicsToggleOffset `
+                    -TimeoutMilliseconds 250) {
+                $playControlsFresh = $true
+            }
+            Write-Output "[pass] Expanded Physics for selected entity $expectedPlayEntity through its current product hit rectangle."
+            continue
+        }
+
+        $playControls = Get-GameAuthoringPlayControls -Path $Context.StdoutPath
+        if ($playControlsFresh -and $null -ne $playControls -and $null -ne $playControls.Fields) {
+            if ($playControls.Fields.entity_id -ne $expectedPlayEntity -or
+                $playControls.Fields.play_state -ne '0') {
+                throw "[PRODUCT/STATE] The visible Play controls did not report the retained selected entity in the stopped state."
+            }
+            $playRect = [pscustomobject]@{
+                X = Convert-HenkaAutomationNumber $playControls.Groups['play_x'].Value
+                Y = Convert-HenkaAutomationNumber $playControls.Groups['play_y'].Value
+                Width = Convert-HenkaAutomationNumber $playControls.Groups['play_width'].Value
+                Height = Convert-HenkaAutomationNumber $playControls.Groups['play_height'].Value
+            }
+            $playRectVisible = $playRect.Width -gt 0.0 -and $playRect.Height -gt 0.0 -and
+                $playRect.X -ge ($detailsRect.X - 0.5) -and
+                $playRect.Y -ge ($detailsRect.Y - 0.5) -and
+                ($playRect.X + $playRect.Width) -le ($detailsRect.X + $detailsRect.Width + 0.5) -and
+                ($playRect.Y + $playRect.Height) -le ($detailsRect.Y + $detailsRect.Height + 0.5)
+            if ($playRectVisible) {
+                break
+            }
+        }
+
+        $scrollOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+        $detailsForPlayScrollX = $detailsRect.X + ($detailsRect.Width * 0.5)
+        $detailsForPlayScrollY = $detailsRect.Y + ($detailsRect.Height * 0.5)
+        Send-HenkaAutomationScroll `
+            -EventPath $Context.AutomationInputPath `
+            -X $detailsForPlayScrollX `
+            -Y $detailsForPlayScrollY `
+            -WheelDelta -1.0
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $Context.StdoutPath `
+                -Pattern $detailsScrollPattern `
+                -StartingOffset $scrollOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "[HARNESS/OBSERVATION] The product did not report consumption and result of the bounded Details scroll."
+        }
+        $scrollReport = Get-LastLogRegexMatch `
+            -Path $Context.StdoutPath `
+            -Pattern $detailsScrollPattern
+        if ($null -eq $scrollReport -or $scrollReport.Groups['handled'].Value -ne '1') {
+            throw "[PRODUCT/UI] Object Details did not own the scroll input needed to reach Physics or Play."
+        }
+        $scrollBefore = Convert-HenkaAutomationNumber $scrollReport.Groups['before'].Value
+        $scrollAfter = Convert-HenkaAutomationNumber $scrollReport.Groups['after'].Value
+        if ($scrollAfter -le $scrollBefore) {
+            throw "[PRODUCT/UI] Object Details reached scroll offset $scrollAfter without progress toward the Physics disclosure or Play controls."
+        }
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $Context.StdoutPath `
+                -Pattern $physicsDisclosurePattern `
+                -StartingOffset $scrollOffset `
+                -TimeoutMilliseconds 3000)) {
+            throw "[HARNESS/OBSERVATION] The Details scroll progressed, but the product did not refresh Physics disclosure geometry."
+        }
+        if (Wait-FileContainsAfterOffset `
+                -Path $Context.StdoutPath `
+                -Pattern $playControlsPattern `
+                -StartingOffset $scrollOffset `
+                -TimeoutMilliseconds 250) {
+            $playControlsFresh = $true
+        }
+    }
+    if ($null -eq $playControls -or -not $playControlsFresh -or -not $physicsDisclosureOpened) {
+        $physicsState = if ($null -eq $physicsDisclosure) { 'unreported' } else { $physicsDisclosure.Fields.expanded }
+        throw "[PRODUCT/UI] Bounded product navigation did not expose fresh Play controls for entity $expectedPlayEntity (Physics expanded=$physicsState)."
+    }
+    $detailsForPlay = Get-DetailsPanelGeometry -Path $Context.StdoutPath
+    if ($null -eq $detailsForPlay) {
+        throw "[HARNESS/OBSERVATION] Current Object Details geometry was unavailable immediately before starting Play."
+    }
+    $playControls = Get-GameAuthoringPlayControls -Path $Context.StdoutPath
+    if ($null -eq $playControls -or $null -eq $playControls.Fields) {
+        throw "[HARNESS/OBSERVATION] Fresh Play control state and geometry were unavailable immediately before interaction."
+    }
+    if ($playControls.Fields.entity_id -notmatch '^\d+$' -or
+        $playControls.Fields.play_state -ne '0') {
+        throw "[PRODUCT/STATE] The selected authored object's Play state changed before the packaged interaction."
+    }
+    $playRect = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $playControls.Groups['play_x'].Value
+        Y = Convert-HenkaAutomationNumber $playControls.Groups['play_y'].Value
+        Width = Convert-HenkaAutomationNumber $playControls.Groups['play_width'].Value
+        Height = Convert-HenkaAutomationNumber $playControls.Groups['play_height'].Value
+    }
+    $detailsRect = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $detailsForPlay.Groups['x'].Value
+        Y = Convert-HenkaAutomationNumber $detailsForPlay.Groups['y'].Value
+        Width = Convert-HenkaAutomationNumber $detailsForPlay.Groups['width'].Value
+        Height = Convert-HenkaAutomationNumber $detailsForPlay.Groups['height'].Value
+    }
+    if ($playRect.Width -le 0.0 -or $playRect.Height -le 0.0 -or
+        $playRect.X -lt ($detailsRect.X - 0.5) -or
+        $playRect.Y -lt ($detailsRect.Y - 0.5) -or
+        ($playRect.X + $playRect.Width) -gt ($detailsRect.X + $detailsRect.Width + 0.5) -or
+        ($playRect.Y + $playRect.Height) -gt ($detailsRect.Y + $detailsRect.Height + 0.5)) {
+        throw "[PRODUCT/UI] The selected object's Play hit target was not wholly inside visible Object Details."
+    }
+    $playStartOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+    Send-HenkaObservedAutomationClick `
+        -EventPath $Context.AutomationInputPath `
+        -StdoutPath $Context.StdoutPath `
+        -X ($playRect.X + ($playRect.Width * 0.5)) `
+        -Y ($playRect.Y + ($playRect.Height * 0.5)) `
+        -Purpose 'Game Authoring Start Play' | Out-Null
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $Context.StdoutPath `
+            -Pattern 'HENKA_AUTOMATION_DIAGNOSTIC game_authoring_play_controls [^\r\n]*\.' `
+            -StartingOffset $playStartOffset `
+            -TimeoutMilliseconds 10000)) {
+        throw "[HARNESS/OBSERVATION] The real Play click was consumed, but no post-action Play-state report was emitted; control activation and product reporting cannot be distinguished."
+    }
+    $runningPlayControls = Get-GameAuthoringPlayControls -Path $Context.StdoutPath
+    if ($null -eq $runningPlayControls -or $null -eq $runningPlayControls.Fields) {
+        throw "[HARNESS/OBSERVATION] The post-action Play report arrived but could not be parsed into structured state."
+    }
+    if ($runningPlayControls.Fields.entity_id -ne $playControls.Fields.entity_id -or
+        $runningPlayControls.Fields.play_state -ne '1') {
+        throw "[PRODUCT/STATE] The real Play control did not start the same selected authored entity."
+    }
+    Write-Output "[pass] Started Play for selected entity $($runningPlayControls.Fields.entity_id) through the real Object Details button."
+
+    $saveCloseOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+    if (-not $Context.Process.CloseMainWindow()) {
+        throw "The second normal window-close request was not delivered."
+    }
+    if (-not (Wait-FileContainsAfterOffset -Path $Context.StdoutPath -Pattern $closePendingPattern -StartingOffset $saveCloseOffset -TimeoutMilliseconds 10000)) {
+        throw "The second window-close request did not restore the unsaved-scene prompt."
+    }
+    $saveCloseDialog = Get-SceneTransitionDialogControls -Path $Context.StdoutPath -Action 'close'
+    if ($null -eq $saveCloseDialog) {
+        throw "[HARNESS/OBSERVATION] The close prompt did not expose parseable current Save geometry after cancellation."
+    }
+    $saveCloseContentWidth = [int]$saveCloseDialog.Groups['content_width'].Value
+    $saveCloseContentHeight = [int]$saveCloseDialog.Groups['content_height'].Value
+    $closeSave = [pscustomobject]@{
+        X = Convert-HenkaAutomationNumber $saveCloseDialog.Groups['save_x'].Value
+        Y = Convert-HenkaAutomationNumber $saveCloseDialog.Groups['save_y'].Value
+        Width = Convert-HenkaAutomationNumber $saveCloseDialog.Groups['save_width'].Value
+        Height = Convert-HenkaAutomationNumber $saveCloseDialog.Groups['save_height'].Value
+    }
+    if ($closeSave.Width -le 0.0 -or $closeSave.Height -le 0.0 -or
+        $closeSave.X -lt -0.5 -or $closeSave.Y -lt -0.5 -or
+        ($closeSave.X + $closeSave.Width) -gt ($saveCloseContentWidth + 0.5) -or
+        ($closeSave.Y + $closeSave.Height) -gt ($saveCloseContentHeight + 0.5)) {
+        throw "The close dialog Save target escaped the visible application content."
+    }
+    $closeSaveDecisionOffset = Get-FileLengthSafe -Path $Context.StdoutPath
+    Send-HenkaObservedAutomationClick `
+        -EventPath $Context.AutomationInputPath `
+        -StdoutPath $Context.StdoutPath `
+        -X ($closeSave.X + ($closeSave.Width * 0.5)) `
+        -Y ($closeSave.Y + ($closeSave.Height * 0.5)) `
+        -Purpose 'Close Save while Play is active' | Out-Null
+    $closePlaySavePattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_close_play_save [^\r\n]*\.'
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $Context.StdoutPath `
+            -Pattern $closePlaySavePattern `
+            -StartingOffset $closeSaveDecisionOffset `
+            -TimeoutMilliseconds 10000)) {
+        throw "[HARNESS/OBSERVATION] The consumed Close Save click produced no Play-lock report, so the save/stop result cannot be classified."
+    }
+    $closePlaySaveLine = Get-LastLogRegexMatch -Path $Context.StdoutPath -Pattern $closePlaySavePattern
+    if ($null -eq $closePlaySaveLine) {
+        throw "[HARNESS/OBSERVATION] The Close Save state report disappeared after its readiness check."
+    }
+    $closePlaySave = ConvertFrom-HenkaClosePlaySaveLine -Line $closePlaySaveLine.Value
+    if ($null -eq $closePlaySave) {
+        throw "[HARNESS/OBSERVATION] The emitted Close Save Play-lock report could not be parsed into structured state."
+    }
+    if ([int]$closePlaySave.result -ne 0 -or
+        $closePlaySave.play_locked_before -ne '1' -or
+        $closePlaySave.play_locked_after -ne '0') {
+        throw "[PRODUCT/STATE] Close Save did not stop Play before committing the save (result=$($closePlaySave.result), before=$($closePlaySave.play_locked_before), after=$($closePlaySave.play_locked_after))."
+    }
+    $terrainSave = Get-HenkaSceneTransitionTerrainSaveAfterOffset -Path $Context.StdoutPath -StartingOffset $closeSaveDecisionOffset -TimeoutMilliseconds 15000
+    if ($null -eq $terrainSave) {
+        throw "[HARNESS/OBSERVATION] Close Save emitted no parseable Terrain persistence report."
+    }
+    if ($terrainSave.Result -ne '0' -or
+        $terrainSave.DirtyBefore -ne '0' -or
+        $terrainSave.Saved -ne '0' -or
+        $terrainSave.DirtyAfter -ne '0') {
+        throw "[PRODUCT/STATE] Saving before close did not report the expected clean terrain persistence state."
+    }
+    $closedResult = Get-HenkaSceneTransitionResultAfterOffset -Path $Context.StdoutPath -Action 'close' -StartingOffset $closeSaveDecisionOffset -TimeoutMilliseconds 15000
+    if ($null -eq $closedResult) {
+        throw "[HARNESS/OBSERVATION] Close Save emitted no parseable completed scene-close report."
+    }
+    if ($closedResult.Result -ne '0' -or
+        $closedResult.ActiveName -ne $closeDraftName -or
+        $closedResult.ActivePath -ne $openRelativePath -or
+        [int]$closedResult.ObjectCount -ne $loadedCount) {
+        throw "[PRODUCT/STATE] Saving before close did not complete the normal editor-close transition."
+    }
+    if (-not $Context.Process.WaitForExit(15000) -or $Context.Process.ExitCode -ne 0) {
+        throw "The packaged editor did not exit successfully after its saved close transition."
+    }
+    if ((Get-FileHash -LiteralPath $Context.SavedScenePath -Algorithm SHA256).Hash -eq $savedSceneHashBeforeClose) {
+        throw "Close Save did not persist the deliberate Scene Name edit."
+    }
+    if (-not (Test-Path -LiteralPath $Context.ProjectManifestPath -PathType Leaf) -or
+        (Get-Content -LiteralPath $Context.ProjectManifestPath -Raw) -notmatch ('(?m)^startup_scene=' + [Regex]::Escape($openRelativePath) + '$')) {
+        throw "Closing after Save changed the project's existing startup-scene authority."
+    }
+    Write-Output "[pass] Packaged Open Scene and close protection used normal product input: invalid Open preserved the loaded document, Close Cancel retained the dirty scene, and Close Save persisted it before clean exit. Close prompt screenshot: $closePromptScreenshot"
     Write-Output "[pass] Open Scene visual evidence: $formScreenshot, $openedScreenshot, $focusScreenshot, $failureScreenshot"
 }

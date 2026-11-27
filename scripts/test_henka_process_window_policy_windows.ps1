@@ -304,13 +304,14 @@ $virtualDesktop = [System.Windows.Forms.SystemInformation]::VirtualScreen
 $form.Location = [System.Drawing.Point]::new(
     [int]($virtualDesktop.Right + 64),
     [int]($virtualDesktop.Top + 64))
-$form.add_HandleCreated({
-    [System.IO.File]::WriteAllText($ReadyPath, [string]$form.Handle)
-})
 if ($KeepHidden) {
     $null = $form.Handle
+    [System.IO.File]::WriteAllText($ReadyPath, [string]$form.Handle)
     [System.Windows.Forms.Application]::Run((New-Object System.Windows.Forms.ApplicationContext))
 } else {
+    $form.add_Shown({
+        [System.IO.File]::WriteAllText($ReadyPath, [string]$form.Handle)
+    })
     [System.Windows.Forms.Application]::Run($form)
 }
 '@
@@ -354,17 +355,24 @@ if ($KeepHidden) {
         throw "The controlled window did not report readiness. Diagnostics: $diagnostics"
     }
 
-    # Allow the shared launch policy's bounded startup monitor to finish its
-    # first native-window pass before checking the stable user-facing state.
-    Start-Sleep -Milliseconds 250
-    $capturedProcess.Process.Refresh()
     $handle = [System.IntPtr]::new([Int64]([System.IO.File]::ReadAllText($readyPath)))
     if ($handle -eq [IntPtr]::Zero -or
-        -not [HenkaWindowPolicyNative]::IsWindowVisible($handle)) {
-        throw "The controlled window was not visible after readiness."
+        -not [HenkaWindowPolicyNative]::IsWindow($handle)) {
+        throw "The controlled window readiness event did not provide a live native handle."
+    }
+    $windowStateDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    while ((-not [HenkaWindowPolicyNative]::IsWindowVisible($handle) -or
+            -not [HenkaWindowPolicyNative]::IsIconic($handle)) -and
+        -not $capturedProcess.Process.HasExited -and
+        [DateTime]::UtcNow -lt $windowStateDeadline) {
+        Start-Sleep -Milliseconds 25
+    }
+    $capturedProcess.Process.Refresh()
+    if (-not [HenkaWindowPolicyNative]::IsWindowVisible($handle)) {
+        throw "The shown control window did not remain visible after the bounded minimize transition."
     }
     if (-not [HenkaWindowPolicyNative]::IsIconic($handle)) {
-        throw "A non-interactive Henka-launched window was not minimized at startup."
+        throw "The shown control window did not become minimized before the bounded startup deadline."
     }
     if ($handle -eq [HenkaWindowPolicyNative]::GetForegroundWindow()) {
         throw "A non-interactive Henka-launched window acquired foreground focus."

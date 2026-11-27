@@ -41,7 +41,25 @@ typedef struct henka_platform_tool_window_close_fixture
     bool update_called;
     bool close_request_observed;
     bool owner_closed_window;
+    bool main_close_request_seen;
+    bool update_after_deferred_main_close;
 } henka_platform_tool_window_close_fixture;
+
+static bool henka_test_platform_main_close_requested(
+    henka_engine* engine,
+    void* user_data)
+{
+    henka_platform_tool_window_close_fixture* fixture =
+        (henka_platform_tool_window_close_fixture*)user_data;
+
+    (void)engine;
+    if (fixture == NULL)
+    {
+        return true;
+    }
+    fixture->main_close_request_seen = true;
+    return false;
+}
 
 static void henka_test_platform_tool_window_close_update(
     henka_engine* engine,
@@ -60,6 +78,8 @@ static void henka_test_platform_tool_window_close_update(
 
     fixture->observe_close_request = false;
     fixture->update_called = true;
+    fixture->update_after_deferred_main_close =
+        fixture->main_close_request_seen;
     fixture->state_result = henka_engine_get_tool_window_state(
         engine, fixture->window_id, &state);
     if (fixture->state_result == HENKA_SUCCESS &&
@@ -513,6 +533,7 @@ static bool henka_test_platform_display_scale_contract(void)
     config.enable_vsync = false;
     config.asset_base_path = ".";
     config.on_update = henka_test_platform_tool_window_close_update;
+    config.on_close_requested = henka_test_platform_main_close_requested;
     config.user_data = &close_fixture;
     if (!SDL_SetHintWithPriority(
             SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE,
@@ -591,12 +612,20 @@ static bool henka_test_platform_display_scale_contract(void)
     memset(&close_event, 0, sizeof(close_event));
     close_event.type = SDL_EVENT_WINDOW_CLOSE_REQUESTED;
     close_event.window.windowID = tool_state.native_window_id;
+    if (!SDL_PushEvent(&close_event))
+    {
+        goto cleanup;
+    }
+    memset(&close_event, 0, sizeof(close_event));
+    close_event.type = SDL_EVENT_QUIT;
     if (!SDL_PushEvent(&close_event) ||
         henka_engine_run(engine) != HENKA_SUCCESS ||
         !close_fixture.update_called ||
         close_fixture.state_result != HENKA_SUCCESS ||
         !close_fixture.close_request_observed ||
         close_fixture.close_result != HENKA_SUCCESS ||
+        !close_fixture.main_close_request_seen ||
+        !close_fixture.update_after_deferred_main_close ||
         !close_fixture.owner_closed_window)
     {
         goto cleanup;

@@ -1836,6 +1836,51 @@ static void test_scene_document_prefab_transform_override_round_trip(void)
     henka_scene_document_destroy(document);
 }
 
+static void test_scene_document_content_equality(void)
+{
+    henka_scene_document* left = NULL;
+    henka_scene_document* right = NULL;
+    henka_scene_document_object object = henka_scene_document_object_default();
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    bool equal = false;
+
+    assert(henka_scene_document_create(&left) == HENKA_SUCCESS);
+    assert(henka_scene_document_create(&right) == HENKA_SUCCESS);
+    assert(henka_scene_document_content_equal(left, right, &equal) ==
+        HENKA_SUCCESS);
+    assert(equal);
+
+    assert(henka_scene_document_set_name(right, "Changed Scene") ==
+        HENKA_SUCCESS);
+    assert(henka_scene_document_content_equal(left, right, &equal) ==
+        HENKA_SUCCESS);
+    assert(!equal);
+
+    assert(henka_scene_document_copy(right, left) == HENKA_SUCCESS);
+    assert(henka_scene_document_content_equal(left, right, &equal) ==
+        HENKA_SUCCESS);
+    assert(equal);
+
+    (void)snprintf(object.name, sizeof(object.name), "%s", "Added Object");
+    assert(henka_scene_document_add_object(right, &object, &object_id) ==
+        HENKA_SUCCESS);
+    assert(object_id != HENKA_INVALID_SCENE_DOCUMENT_ID);
+    assert(henka_scene_document_content_equal(left, right, &equal) ==
+        HENKA_SUCCESS);
+    assert(!equal);
+
+    assert(henka_scene_document_swap_contents(left, right) == HENKA_SUCCESS);
+    assert(henka_scene_document_content_equal(left, right, &equal) ==
+        HENKA_SUCCESS);
+    assert(!equal);
+    assert(henka_scene_document_content_equal(NULL, right, &equal) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+    assert(!equal);
+
+    henka_scene_document_destroy(right);
+    henka_scene_document_destroy(left);
+}
+
 int main(void)
 {
     const char* first_path = "build/test_tmp/scene_document_slice_b.hscene";
@@ -1902,6 +1947,7 @@ int main(void)
         fprintf(stderr, "scene document scene-name API test failed\n");
         goto cleanup;
     }
+    test_scene_document_content_equality();
     test_scene_document_save_propagates_path_errors();
     test_scene_document_load_propagates_path_errors();
     test_scene_document_prefab_provenance_round_trip();

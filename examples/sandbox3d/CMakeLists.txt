@@ -22,6 +22,7 @@ add_executable(henka_sandbox3d
     object_details_tools.c
     interaction_tools.c
     terrain_autosave.c
+    terrain_scene_transition.c
     physics_tools.c
     studio_environment.c
     workspace_tools.c

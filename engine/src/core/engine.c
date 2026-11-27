@@ -437,6 +437,15 @@ bool henka_engine_should_continue_run(const henka_engine* engine)
         !engine->exit_requested;
 }
 
+static bool henka_engine_close_request_approved(henka_engine* engine)
+{
+    return engine != NULL &&
+        (engine->config.on_close_requested == NULL ||
+         engine->config.on_close_requested(
+             engine,
+             engine->config.user_data));
+}
+
 static henka_result henka_engine_abort_render_frame(
     henka_engine* engine,
     henka_result primary_result,
@@ -1202,8 +1211,11 @@ henka_result henka_engine_run(henka_engine* engine)
 
         if (frame_state.close_requested)
         {
-            henka_engine_request_exit(engine);
-            break;
+            if (henka_engine_close_request_approved(engine))
+            {
+                henka_engine_request_exit(engine);
+                break;
+            }
         }
 
         henka_engine_handle_resize(engine, &frame_state);
@@ -1254,7 +1266,10 @@ henka_result henka_engine_run(henka_engine* engine)
             }
             else
             {
-                henka_engine_request_exit(engine);
+                if (henka_engine_close_request_approved(engine))
+                {
+                    henka_engine_request_exit(engine);
+                }
             }
         }
 
