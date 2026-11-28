@@ -67,6 +67,53 @@ static void test_editor_model_stages_invalid_text_and_reverts(void)
     sandbox3d_script_editor_model_destroy(model);
 }
 
+static void test_dirty_source_rejects_replacement_without_losing_state(void)
+{
+    static const char source[] = "fn OnUpdate() { }\n";
+    static const char edit[] = "fn OnUpdate() { let keep = 1; }\n";
+    static const char replacement[] = "fn OnUpdate() { let other = 2; }\n";
+    sandbox3d_script_editor_model* model = NULL;
+    const char* loaded = NULL;
+    const char* asset_path = NULL;
+    size_t loaded_size = 0U;
+
+    assert(sandbox3d_script_editor_model_create(
+               HENKA_SCRIPT_LANGUAGE_HENKASCRIPT, &model) == HENKA_SUCCESS);
+    assert(sandbox3d_script_editor_model_load_text(
+               model, source, sizeof(source) - 1U) == HENKA_SUCCESS);
+    assert(sandbox3d_script_editor_model_set_selection(
+               model, 0U, sizeof(source) - 1U) == HENKA_SUCCESS);
+    assert(sandbox3d_script_editor_model_replace_selection(
+               model, edit, sizeof(edit) - 1U) == HENKA_SUCCESS);
+    assert(sandbox3d_script_editor_model_is_dirty(model));
+
+    assert(sandbox3d_script_editor_model_load_text(
+               model, replacement, sizeof(replacement) - 1U) ==
+           HENKA_ERROR_INVALID_STATE);
+    assert(sandbox3d_script_editor_model_get_source(
+               model, &loaded, &loaded_size) == HENKA_SUCCESS);
+    assert(loaded_size == sizeof(edit) - 1U);
+    assert(memcmp(loaded, edit, loaded_size) == 0);
+    assert(sandbox3d_script_editor_model_is_dirty(model));
+    assert(sandbox3d_script_editor_model_get_caret_offset(model) ==
+           sizeof(edit) - 1U);
+    asset_path = sandbox3d_script_editor_model_get_asset_path(model);
+    assert(asset_path != NULL && asset_path[0] == '\0');
+
+    /* A dirty buffer must reject a context switch before touching the source
+     * filesystem, even when the requested asset is unavailable. */
+    assert(sandbox3d_script_editor_model_load_asset(
+               model, "missing-project-root", "scripts/other.hks") ==
+           HENKA_ERROR_INVALID_STATE);
+    assert(sandbox3d_script_editor_model_get_source(
+               model, &loaded, &loaded_size) == HENKA_SUCCESS);
+    assert(loaded_size == sizeof(edit) - 1U);
+    assert(memcmp(loaded, edit, loaded_size) == 0);
+    assert(sandbox3d_script_editor_model_is_dirty(model));
+    assert(strcmp(sandbox3d_script_editor_model_get_asset_path(model), "") == 0);
+    sandbox3d_script_editor_model_destroy(model);
+}
+
 static void test_editor_model_rejects_play_mutation(void)
 {
     static const char source[] = "fn OnUpdate() { }\n";
@@ -172,6 +219,7 @@ int main(void)
 {
     test_editor_model_preserves_structure_and_moves_caret();
     test_editor_model_stages_invalid_text_and_reverts();
+    test_dirty_source_rejects_replacement_without_losing_state();
     test_editor_model_rejects_play_mutation();
     test_editor_model_focus_and_position_are_bounded();
     test_editor_model_crlf_lines_exclude_terminator_from_columns();

@@ -1514,12 +1514,15 @@ function ConvertFrom-HenkaScenePathEditorControlsLine {
 
     $fieldNames = @(
         'visible', 'mode', 'path_rect', 'confirm_rect', 'cancel_rect',
+        'relative_path_empty', 'relative_path')
+    $requiredFieldNames = @(
+        'visible', 'mode', 'path_rect', 'confirm_rect', 'cancel_rect',
         'relative_path_empty')
     $fields = ConvertFrom-HenkaAutomationDiagnosticFields `
         -Line $Line `
         -EventName 'scene_path_editor_controls' `
         -FieldNames $fieldNames `
-        -RequiredFieldNames $fieldNames
+        -RequiredFieldNames $requiredFieldNames
     if ($null -eq $fields -or $fields.visible -ne '1' -or
         $fields.mode -ne $Mode) {
         return $null
@@ -1560,7 +1563,7 @@ function ConvertFrom-HenkaSceneTransitionControlsLine {
     $fieldNames = switch ($EventName) {
         'scene_transition_dialog' {
             @(
-                'available', 'action', 'scene_dirty', 'scene_dirty_query_result',
+                'available', 'action', 'scene_dirty', 'script_dirty', 'transform_dirty', 'scene_dirty_query_result',
                 'terrain_dirty_query_result', 'terrain_dirty_regions',
                 'content_width', 'content_height', 'active_name', 'active_path',
                 'object_count', 'selected_entity', 'save_x', 'save_y',
@@ -1626,7 +1629,7 @@ function ConvertFrom-HenkaTerrainSceneReloadLine {
 
 function ConvertFrom-HenkaSceneTransitionDecisionLine {
     param([Parameter(Mandatory = $true)][string]$Line)
-    $fieldNames = @('action','choice','scene_retained','scene_dirty','terrain_dirty_regions','active_name','active_path','object_count','selected_entity','terrain_active')
+    $fieldNames = @('action','choice','scene_retained','scene_dirty','script_dirty','transform_dirty','terrain_dirty_regions','active_name','active_path','object_count','selected_entity','terrain_active')
     $values = ConvertFrom-HenkaAutomationDiagnosticFields -Line $Line -EventName 'scene_transition_decision' -FieldNames $fieldNames -RequiredFieldNames $fieldNames
     if ($null -eq $values) { return $null }
     return [pscustomobject]@{
@@ -1634,6 +1637,8 @@ function ConvertFrom-HenkaSceneTransitionDecisionLine {
         Choice = $values.choice
         SceneRetained = $values.scene_retained
         SceneDirty = $values.scene_dirty
+        ScriptDirty = $values.script_dirty
+        TransformDirty = $values.transform_dirty
         TerrainDirtyRegions = $values.terrain_dirty_regions
         ActiveName = $values.active_name
         ActivePath = $values.active_path

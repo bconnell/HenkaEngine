@@ -632,9 +632,12 @@ typedef struct sandbox3d_state
     sandbox3d_ui_geometry_report scene_objects_layout_report;
     sandbox3d_ui_geometry_report scene_objects_authoring_control_reports[
         SANDBOX3D_SCENE_OBJECTS_CONTROL_REPORT_COUNT];
+    sandbox3d_ui_geometry_report object_details_overview_disclosure_report;
     sandbox3d_ui_geometry_report object_details_actions_disclosure_report;
     sandbox3d_ui_geometry_report game_authoring_scene_actions_report;
     sandbox3d_ui_geometry_report scene_transition_confirmation_report;
+    sandbox3d_ui_geometry_report object_details_script_actions_report;
+    sandbox3d_ui_geometry_report script_editor_surface_report;
     sandbox3d_ui_geometry_report object_details_transform_disclosure_report;
     sandbox3d_ui_geometry_report object_details_transform_row_reports[
         SANDBOX3D_TRANSFORM_INSPECTOR_ROW_COUNT];
@@ -782,6 +785,9 @@ typedef struct sandbox3d_state
     char scene_transition_target_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
     bool scene_transition_save_as_active;
     bool scene_transition_scene_dirty;
+    bool scene_transition_script_dirty;
+    bool scene_transition_transform_dirty;
+    henka_entity scene_transition_transform_entity;
     uint32_t scene_transition_terrain_dirty_regions;
     henka_result scene_transition_terrain_dirty_query_result;
     sandbox3d_mcp_server* mcp_server;
@@ -996,6 +1002,8 @@ static void sandbox3d_reset_ui_geometry_reports(sandbox3d_state* state)
         sizeof(state->scene_objects_layout_report));
     memset(state->scene_objects_authoring_control_reports, 0,
         sizeof(state->scene_objects_authoring_control_reports));
+    memset(&state->object_details_overview_disclosure_report, 0,
+        sizeof(state->object_details_overview_disclosure_report));
     memset(&state->object_details_actions_disclosure_report, 0,
         sizeof(state->object_details_actions_disclosure_report));
     memset(&state->game_authoring_scene_actions_report, 0,
@@ -7678,6 +7686,7 @@ static henka_result sandbox3d_apply_transform_inspector(
     }
     if (state == NULL || state->scene == NULL || authored_object == NULL ||
         state->game_authoring == NULL || entity == HENKA_INVALID_ENTITY ||
+        state->transform_inspector.entity != entity ||
         sandbox3d_game_authoring_is_play_locked(state->game_authoring) ||
         henka_scene_is_entity_transform_locked(state->scene, entity))
     {
@@ -30945,6 +30954,24 @@ static bool sandbox3d_details_flow_disclosure(
     disclosure_bounds = bounds;
     {
         const henka_entity selected_entity = sandbox3d_get_real_selected_entity(state);
+        if (group_id == SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW &&
+            sandbox3d_automation_input_is_owned() &&
+            sandbox3d_ui_geometry_report_changed(
+                &state->object_details_overview_disclosure_report,
+                selected_entity,
+                disclosure_bounds,
+                *expanded ? 1 : 0))
+        {
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC object_details_disclosure id=overview entity=%u x=%.1f y=%.1f width=%.1f height=%.1f expanded=%d.\n",
+                (unsigned int)selected_entity,
+                disclosure_bounds.x,
+                disclosure_bounds.y,
+                disclosure_bounds.width,
+                disclosure_bounds.height,
+                *expanded ? 1 : 0);
+            fflush(stdout);
+        }
         if (group_id == SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS &&
             sandbox3d_automation_input_is_owned() &&
             sandbox3d_ui_geometry_report_changed(
@@ -31343,6 +31370,25 @@ static henka_result sandbox3d_execute_scene_transition(
             break;
     }
 
+    if (result == HENKA_SUCCESS &&
+        transition != SANDBOX3D_SCENE_TRANSITION_CONFIRMATION_CLOSE &&
+        state->script_editor_model != NULL)
+    {
+        sandbox3d_script_editor_model_destroy(state->script_editor_model);
+        state->script_editor_model = NULL;
+    }
+
+    if (result == HENKA_SUCCESS)
+    {
+        state->scene_transition_transform_dirty = false;
+        state->scene_transition_transform_entity = HENKA_INVALID_ENTITY;
+        if (transition != SANDBOX3D_SCENE_TRANSITION_CONFIRMATION_CLOSE)
+        {
+            sandbox3d_transform_inspector_init(
+                &state->transform_inspector);
+        }
+    }
+
     if (transition == SANDBOX3D_SCENE_TRANSITION_CONFIRMATION_RELOAD &&
         sandbox3d_automation_input_is_owned())
     {
@@ -31495,6 +31541,7 @@ static bool sandbox3d_request_scene_transition(
 {
     bool scene_has_unsaved_changes = true;
     bool has_unsaved_changes;
+    bool transform_dirty;
     henka_terrain_world_stats terrain_stats = {0};
     henka_result scene_dirty_result;
     henka_result dirty_result;
@@ -31555,9 +31602,19 @@ static bool sandbox3d_request_scene_transition(
         }
     }
     dirty_result = scene_dirty_result;
+    state->scene_transition_script_dirty =
+        state->script_editor_model != NULL &&
+        sandbox3d_script_editor_model_is_dirty(state->script_editor_model);
+    transform_dirty = sandbox3d_transform_inspector_has_pending_edits(
+        &state->transform_inspector);
+    state->scene_transition_transform_dirty = transform_dirty;
+    state->scene_transition_transform_entity = transform_dirty
+        ? state->transform_inspector.entity
+        : HENKA_INVALID_ENTITY;
     has_unsaved_changes = scene_dirty_result != HENKA_SUCCESS ||
         terrain_dirty_result != HENKA_SUCCESS ||
-        scene_has_unsaved_changes || terrain_dirty_regions > 0U;
+        scene_has_unsaved_changes || terrain_dirty_regions > 0U ||
+        state->scene_transition_script_dirty || transform_dirty;
     state->scene_transition_scene_dirty =
         scene_dirty_result != HENKA_SUCCESS || scene_has_unsaved_changes;
     state->scene_transition_terrain_dirty_regions = terrain_dirty_regions;
@@ -31601,7 +31658,7 @@ static bool sandbox3d_request_scene_transition(
             state,
             false,
             false,
-            "Unsaved scene changes. Save, Discard, or Cancel the %s action.",
+            "Unsaved changes. Save, Discard, or Cancel the %s action.",
             sandbox3d_scene_transition_name(transition));
     }
     if (sandbox3d_automation_input_is_owned())
@@ -31634,14 +31691,18 @@ static bool sandbox3d_request_scene_transition(
         else if (transition == SANDBOX3D_SCENE_TRANSITION_CONFIRMATION_CLOSE)
         {
             printf(
-                "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=close_confirmation_pending name=%s.\n",
-                active_name_valid ? active_name : "<unavailable>");
+                "HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=close_confirmation_pending name=%s script_dirty=%u transform_dirty=%u.\n",
+                active_name_valid ? active_name : "<unavailable>",
+                state->scene_transition_script_dirty ? 1U : 0U,
+                state->scene_transition_transform_dirty ? 1U : 0U);
         }
         printf(
-            "HENKA_AUTOMATION_DIAGNOSTIC scene_transition_prompt_pending action=%s dirty=%u scene_dirty=%u scene_dirty_query_result=%d terrain_dirty_query_result=%d terrain_dirty_regions=%u target_path=%s.\n",
+            "HENKA_AUTOMATION_DIAGNOSTIC scene_transition_prompt_pending action=%s dirty=%u scene_dirty=%u script_dirty=%u transform_dirty=%u scene_dirty_query_result=%d terrain_dirty_query_result=%d terrain_dirty_regions=%u target_path=%s.\n",
             sandbox3d_scene_transition_name(transition),
             has_unsaved_changes ? 1U : 0U,
             state->scene_transition_scene_dirty ? 1U : 0U,
+            state->scene_transition_script_dirty ? 1U : 0U,
+            state->scene_transition_transform_dirty ? 1U : 0U,
             (int)scene_dirty_result,
             (int)terrain_dirty_result,
             terrain_dirty_regions,
@@ -31727,36 +31788,155 @@ static henka_result sandbox3d_save_dirty_terrain_before_transition(
     return result;
 }
 
+static henka_result sandbox3d_save_dirty_script_before_transition(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    const bool dirty_before = state != NULL &&
+        state->script_editor_model != NULL &&
+        sandbox3d_script_editor_model_is_dirty(state->script_editor_model);
+    const char* relative_path = dirty_before
+        ? sandbox3d_script_editor_model_get_asset_path(
+              state->script_editor_model)
+        : NULL;
+    henka_result result = HENKA_SUCCESS;
+
+    if (engine == NULL || state == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!dirty_before)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (relative_path == NULL || relative_path[0] == '\0')
+    {
+        result = HENKA_ERROR_INVALID_STATE;
+    }
+    else
+    {
+        result = sandbox3d_script_editor_model_save(
+            state->script_editor_model,
+            henka_engine_get_user_data_base_path(engine),
+            relative_path);
+        if (result == HENKA_SUCCESS &&
+            sandbox3d_script_editor_model_is_dirty(
+                state->script_editor_model))
+        {
+            result = HENKA_ERROR_UNKNOWN;
+        }
+    }
+    if (sandbox3d_automation_input_is_owned())
+    {
+        printf(
+            "HENKA_AUTOMATION_DIAGNOSTIC scene_transition_script_save action=%s result=%d dirty_before=%u dirty_after=%u path_available=%u.\n",
+            sandbox3d_scene_transition_name(
+                state->scene_transition_confirmation),
+            (int)result,
+            dirty_before ? 1U : 0U,
+            sandbox3d_script_editor_model_is_dirty(
+                state->script_editor_model) ? 1U : 0U,
+            relative_path != NULL && relative_path[0] != '\0' ? 1U : 0U);
+        fflush(stdout);
+    }
+    return result;
+}
+
 static henka_result sandbox3d_save_scene_before_transition(
     henka_engine* engine,
     sandbox3d_state* state)
 {
-    const char* relative_path;
-    henka_result result;
+    const char* relative_path = NULL;
+    henka_result result = HENKA_SUCCESS;
 
     if (engine == NULL || state == NULL || state->game_authoring == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    relative_path = sandbox3d_game_authoring_get_relative_path(
-        state->game_authoring);
-    if (relative_path == NULL || relative_path[0] == '\0')
+    if (state->scene_transition_transform_dirty)
     {
-        result = sandbox3d_scene_path_editor_begin(
-            &state->scene_transition_save_as_editor,
-            SANDBOX3D_SCENE_PATH_EDITOR_MODE_SAVE_AS);
-        if (result == HENKA_SUCCESS)
+        const henka_entity entity =
+            state->scene_transition_transform_entity;
+        henka_scene_document_id document_id =
+            HENKA_INVALID_SCENE_DOCUMENT_ID;
+        henka_scene_document_object authored_object = {0};
+        bool transform_changed = false;
+
+        if (entity == HENKA_INVALID_ENTITY || state->scene == NULL ||
+            state->transform_inspector.entity != entity ||
+            !sandbox3d_transform_inspector_has_pending_edits(
+                &state->transform_inspector) ||
+            !henka_scene_is_entity_valid(state->scene, entity))
         {
-            state->scene_transition_save_as_active = true;
+            return HENKA_ERROR_INVALID_STATE;
         }
-        return result;
+        result = sandbox3d_game_authoring_get_object_for_entity(
+            state->game_authoring,
+            entity,
+            &document_id,
+            &authored_object);
+        if (result != HENKA_SUCCESS ||
+            document_id == HENKA_INVALID_SCENE_DOCUMENT_ID)
+        {
+            return result != HENKA_SUCCESS ? result : HENKA_ERROR_INVALID_STATE;
+        }
+        result = sandbox3d_apply_transform_inspector(
+            state,
+            entity,
+            &authored_object,
+            &transform_changed);
+        if (transform_changed)
+        {
+            state->scene_transition_scene_dirty = true;
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        if (sandbox3d_transform_inspector_has_pending_edits(
+                &state->transform_inspector))
+        {
+            return HENKA_ERROR_INVALID_STATE;
+        }
+        state->scene_transition_transform_dirty = false;
+        state->scene_transition_transform_entity = HENKA_INVALID_ENTITY;
+        if (sandbox3d_automation_input_is_owned())
+        {
+            printf(
+                "HENKA_AUTOMATION_DIAGNOSTIC scene_transition_transform_save result=0 entity=%u changed=%u scene_dirty=%u.\n",
+                (unsigned int)entity,
+                transform_changed ? 1U : 0U,
+                state->scene_transition_scene_dirty ? 1U : 0U);
+            fflush(stdout);
+        }
     }
-    result = sandbox3d_game_authoring_save(
-        state->game_authoring,
-        henka_engine_get_user_data_base_path(engine));
+    if (state->scene_transition_scene_dirty)
+    {
+        relative_path = sandbox3d_game_authoring_get_relative_path(
+            state->game_authoring);
+        if (relative_path == NULL || relative_path[0] == '\0')
+        {
+            result = sandbox3d_scene_path_editor_begin(
+                &state->scene_transition_save_as_editor,
+                SANDBOX3D_SCENE_PATH_EDITOR_MODE_SAVE_AS);
+            if (result == HENKA_SUCCESS)
+            {
+                state->scene_transition_save_as_active = true;
+            }
+            return result;
+        }
+        result = sandbox3d_game_authoring_save(
+            state->game_authoring,
+            henka_engine_get_user_data_base_path(engine));
+    }
     if (result == HENKA_SUCCESS)
     {
         result = sandbox3d_save_dirty_terrain_before_transition(state);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_save_dirty_script_before_transition(
+            engine, state);
     }
     return result;
 }
@@ -31776,6 +31956,10 @@ static void sandbox3d_cancel_scene_transition(sandbox3d_state* state)
         sizeof(state->scene_transition_target_path));
     memset(&state->scene_transition_confirmation_report, 0,
         sizeof(state->scene_transition_confirmation_report));
+    memset(&state->game_authoring_scene_actions_report, 0,
+        sizeof(state->game_authoring_scene_actions_report));
+    memset(&state->object_details_transform_actions_report, 0,
+        sizeof(state->object_details_transform_actions_report));
 }
 
 static void sandbox3d_draw_scene_transition_modal(
@@ -31797,6 +31981,7 @@ static void sandbox3d_draw_scene_transition_modal(
     const float button_y = top + height - padding - button_height;
     const char* transition_name = sandbox3d_scene_transition_name(
         state->scene_transition_confirmation);
+    const bool transform_dirty = state->scene_transition_transform_dirty;
     const henka_ui_rect panel = {left, top, width, height};
 
     (void)henka_ui_overlay_rect(
@@ -31804,7 +31989,7 @@ static void sandbox3d_draw_scene_transition_modal(
         (henka_ui_rect){0.0f, 0.0f, (float)content_width,
             (float)content_height},
         (henka_vec4){0.0f, 0.0f, 0.0f, 0.62f});
-    (void)henka_ui_panel(state->ui, panel, "Unsaved Scene Changes");
+    (void)henka_ui_panel(state->ui, panel, "Unsaved Changes");
     (void)henka_ui_label(
         state->ui,
         left + padding,
@@ -31818,7 +32003,13 @@ static void sandbox3d_draw_scene_transition_modal(
         left + padding,
         top + 80.0f,
         1.0f,
-        "Discard continues without saving. Cancel keeps this scene open.");
+        transform_dirty
+            ? (close_transition
+                ? "Transform Inspector values are also unsaved. Cancel returns to the editor."
+                : "Transform Inspector values are also unsaved. Cancel keeps this scene open.")
+            : (close_transition
+                ? "Discard closes without saving. Cancel returns to the editor."
+                : "Discard continues without saving. Cancel keeps this scene open."));
 
     if (save_as_active)
     {
@@ -31913,6 +32104,11 @@ static void sandbox3d_draw_scene_transition_modal(
                     state);
                 if (save_result == HENKA_SUCCESS)
                 {
+                    save_result = sandbox3d_save_dirty_script_before_transition(
+                        engine, state);
+                }
+                if (save_result == HENKA_SUCCESS)
+                {
                     (void)sandbox3d_execute_scene_transition(engine, state);
                 }
                 else
@@ -31921,7 +32117,7 @@ static void sandbox3d_draw_scene_transition_modal(
                         state,
                         true,
                         false,
-                        "Scene saved, but terrain changes could not be saved; the transition remains pending: %s.",
+                        "A pending change could not be saved; the transition remains pending: %s.",
                         henka_result_to_string(save_result));
                 }
             }
@@ -31974,9 +32170,11 @@ static void sandbox3d_draw_scene_transition_modal(
                 sandbox3d_game_authoring_get_relative_path(
                     state->game_authoring);
             printf(
-                "HENKA_AUTOMATION_DIAGNOSTIC scene_transition_dialog available=1 action=%s scene_dirty=%u scene_dirty_query_result=%d terrain_dirty_query_result=%d terrain_dirty_regions=%u content_width=%d content_height=%d active_name=%s active_path=%s object_count=%zu selected_entity=%llu save_x=%.1f save_y=%.1f save_width=%.1f save_height=%.1f discard_x=%.1f discard_y=%.1f discard_width=%.1f discard_height=%.1f cancel_x=%.1f cancel_y=%.1f cancel_width=%.1f cancel_height=%.1f.\n",
+                "HENKA_AUTOMATION_DIAGNOSTIC scene_transition_dialog available=1 action=%s scene_dirty=%u script_dirty=%u transform_dirty=%u scene_dirty_query_result=%d terrain_dirty_query_result=%d terrain_dirty_regions=%u content_width=%d content_height=%d active_name=%s active_path=%s object_count=%zu selected_entity=%llu save_x=%.1f save_y=%.1f save_width=%.1f save_height=%.1f discard_x=%.1f discard_y=%.1f discard_width=%.1f discard_height=%.1f cancel_x=%.1f cancel_y=%.1f cancel_width=%.1f cancel_height=%.1f.\n",
                 transition_name,
                 state->scene_transition_scene_dirty ? 1U : 0U,
+                state->scene_transition_script_dirty ? 1U : 0U,
+                transform_dirty ? 1U : 0U,
                 (int)state->scene_transition_dirty_query_result,
                 (int)state->scene_transition_terrain_dirty_query_result,
                 state->scene_transition_terrain_dirty_regions,
@@ -32007,13 +32205,7 @@ static void sandbox3d_draw_scene_transition_modal(
             save_result = HENKA_SUCCESS;
             if (close_transition)
             {
-                const char* relative_path =
-                    sandbox3d_game_authoring_get_relative_path(
-                        state->game_authoring);
-                if (relative_path != NULL && relative_path[0] != '\0')
-                {
-                    save_result = sandbox3d_stop_play_for_close_save(state);
-                }
+                save_result = sandbox3d_stop_play_for_close_save(state);
             }
             if (save_result == HENKA_SUCCESS)
             {
@@ -32068,9 +32260,11 @@ static void sandbox3d_draw_scene_transition_modal(
             if (sandbox3d_automation_input_is_owned())
             {
                 printf(
-                    "HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision action=%s choice=cancel scene_retained=1 scene_dirty=%u terrain_dirty_regions=%u active_name=%s active_path=%s object_count=%zu selected_entity=%llu terrain_active=%u.\n",
+                "HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision action=%s choice=cancel scene_retained=1 scene_dirty=%u script_dirty=%u transform_dirty=%u terrain_dirty_regions=%u active_name=%s active_path=%s object_count=%zu selected_entity=%llu terrain_active=%u.\n",
                     sandbox3d_scene_transition_name(cancelled),
                     state->scene_transition_scene_dirty ? 1U : 0U,
+                    state->scene_transition_script_dirty ? 1U : 0U,
+                    state->scene_transition_transform_dirty ? 1U : 0U,
                     state->scene_transition_terrain_dirty_regions,
                     active_name_valid ? active_name : "<unavailable>",
                     active_path != NULL ? active_path : "<none>",
@@ -33758,6 +33952,39 @@ details_group_overview:
                     &state->script_editor_model,
                     sandbox3d_game_authoring_is_play_locked(
                         state->game_authoring));
+                if (sandbox3d_automation_input_is_owned() &&
+                    sandbox3d_ui_geometry_report_changed(
+                        &state->script_editor_surface_report,
+                        entity,
+                        row,
+                        state->script_editor_model != NULL &&
+                                sandbox3d_script_editor_model_is_dirty(
+                                    state->script_editor_model)
+                            ? 1
+                            : 0))
+                {
+                    const henka_ui_rect script_code_bounds =
+                        sandbox3d_script_editor_get_code_bounds(row);
+                    printf(
+                        "HENKA_AUTOMATION_DIAGNOSTIC script_editor_surface visible=1 entity=%llu language=%d dirty=%u asset_path=\"%s\" x=%.1f y=%.1f width=%.1f height=%.1f code_x=%.1f code_y=%.1f code_width=%.1f code_height=%.1f.\n",
+                        (unsigned long long)entity,
+                        (int)preview_behavior.language,
+                        state->script_editor_model != NULL &&
+                                sandbox3d_script_editor_model_is_dirty(
+                                    state->script_editor_model)
+                            ? 1U
+                            : 0U,
+                        preview_behavior.asset_path,
+                        row.x,
+                        row.y,
+                        row.width,
+                        row.height,
+                        script_code_bounds.x,
+                        script_code_bounds.y,
+                        script_code_bounds.width,
+                        script_code_bounds.height);
+                    fflush(stdout);
+                }
             }
         }
         if (authored_object_available &&
@@ -33770,11 +33997,38 @@ details_group_overview:
         {
             const float gap = 6.0f;
             const float button_width = (row.width - gap) * 0.5f;
+            const henka_ui_rect add_lua_bounds = {
+                row.x, row.y, button_width, row.height};
+            const henka_ui_rect add_hks_bounds = {
+                row.x + button_width + gap,
+                row.y,
+                button_width,
+                row.height};
             henka_result attach_result;
+            if (sandbox3d_automation_input_is_owned() &&
+                sandbox3d_ui_geometry_report_changed(
+                    &state->object_details_script_actions_report,
+                    entity,
+                    row,
+                    1))
+            {
+                printf(
+                    "HENKA_AUTOMATION_DIAGNOSTIC object_details_script_actions visible=1 entity=%llu lua_x=%.1f lua_y=%.1f lua_width=%.1f lua_height=%.1f hks_x=%.1f hks_y=%.1f hks_width=%.1f hks_height=%.1f.\n",
+                    (unsigned long long)entity,
+                    add_lua_bounds.x,
+                    add_lua_bounds.y,
+                    add_lua_bounds.width,
+                    add_lua_bounds.height,
+                    add_hks_bounds.x,
+                    add_hks_bounds.y,
+                    add_hks_bounds.width,
+                    add_hks_bounds.height);
+                fflush(stdout);
+            }
             if (henka_ui_button(
                     state->ui,
                     add_lua_action_id,
-                    (henka_ui_rect){row.x, row.y, button_width, row.height},
+                    add_lua_bounds,
                     "Add Lua") &&
                 !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
             {
@@ -33795,7 +34049,7 @@ details_group_overview:
             if (henka_ui_button(
                     state->ui,
                     add_hks_action_id,
-                    (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
+                    add_hks_bounds,
                     "Add HenkaScript") &&
                 !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
             {

@@ -16,6 +16,8 @@ const char* henka_result_to_string(henka_result result)
             return "asset source error";
         case HENKA_ERROR_LIMIT:
             return "limit exceeded";
+        case HENKA_ERROR_INVALID_STATE:
+            return "invalid state";
         case HENKA_ERROR_PLATFORM:
             return "platform error";
         case HENKA_ERROR_RENDERER:

@@ -46,6 +46,22 @@ static bool sandbox3d_script_editor_rect_is_valid(henka_ui_rect bounds)
         bounds.x >= 0.0f && bounds.y >= 0.0f;
 }
 
+henka_ui_rect sandbox3d_script_editor_get_code_bounds(henka_ui_rect bounds)
+{
+    henka_ui_rect code_bounds = {0.0f, 0.0f, 0.0f, 0.0f};
+    if (!sandbox3d_script_editor_rect_is_valid(bounds))
+    {
+        return code_bounds;
+    }
+    code_bounds.x = bounds.x;
+    code_bounds.y = bounds.y + SANDBOX3D_SCRIPT_EDITOR_HEADER_HEIGHT;
+    code_bounds.width = bounds.width;
+    code_bounds.height = bounds.height > SANDBOX3D_SCRIPT_EDITOR_HEADER_HEIGHT
+        ? bounds.height - SANDBOX3D_SCRIPT_EDITOR_HEADER_HEIGHT
+        : 0.0f;
+    return code_bounds;
+}
+
 static const char* sandbox3d_script_editor_language_label(
     henka_script_language language)
 {
@@ -600,6 +616,7 @@ henka_result sandbox3d_script_editor_draw_preview(
     henka_lua_diagnostic lua_diagnostic;
     henka_script_source_diagnostic source_diagnostic;
     henka_ui_interaction_state code_interaction;
+    henka_ui_rect code_bounds;
     henka_vec2 mouse_position;
     char status_text[128];
     char diagnostic_text[192];
@@ -618,6 +635,9 @@ henka_result sandbox3d_script_editor_draw_preview(
     henka_script_source_diagnostic reload_diagnostic;
     char indent_replacement[SANDBOX3D_SCRIPT_EDITOR_MAX_INDENT_SPACES + 2U];
     sandbox3d_script_editor_model* model;
+    henka_script_language model_language;
+    bool source_switch_blocked = false;
+    bool source_switch_failed = false;
     if (ui == NULL || !sandbox3d_script_editor_rect_is_valid(bounds) ||
         engine == NULL || project_root == NULL || behavior == NULL ||
         io_model == NULL ||
@@ -634,24 +654,40 @@ henka_result sandbox3d_script_editor_draw_preview(
             sandbox3d_script_editor_model_get_asset_path(model),
             behavior->asset_path) != 0)
     {
-        sandbox3d_script_editor_model_destroy(model);
-        model = NULL;
-        result = sandbox3d_script_editor_model_create(
-            behavior->language, &model);
-        if (result == HENKA_SUCCESS)
+        if (model != NULL &&
+            sandbox3d_script_editor_model_is_dirty(model))
         {
-            result = sandbox3d_script_editor_model_load_asset(
-                model, project_root, behavior->asset_path);
-        }
-        if (result != HENKA_SUCCESS)
-        {
-            sandbox3d_script_editor_model_destroy(model);
-            *io_model = NULL;
-            model = NULL;
+            source_switch_blocked = true;
         }
         else
         {
-            *io_model = model;
+            sandbox3d_script_editor_model* candidate = NULL;
+            result = sandbox3d_script_editor_model_create(
+                behavior->language, &candidate);
+            if (result == HENKA_SUCCESS)
+            {
+                result = sandbox3d_script_editor_model_load_asset(
+                    candidate, project_root, behavior->asset_path);
+            }
+            if (result == HENKA_SUCCESS)
+            {
+                sandbox3d_script_editor_model_destroy(model);
+                model = candidate;
+                *io_model = model;
+            }
+            else
+            {
+                sandbox3d_script_editor_model_destroy(candidate);
+                source_switch_failed = true;
+                if (model == NULL)
+                {
+                    *io_model = NULL;
+                }
+                else
+                {
+                    source_switch_blocked = true;
+                }
+            }
         }
     }
     (void)henka_ui_overlay_rect(
@@ -686,23 +722,24 @@ henka_result sandbox3d_script_editor_draw_preview(
     {
         return result;
     }
+    model_language = sandbox3d_script_editor_model_get_language(model);
     presentation_tokens = (sandbox3d_script_editor_token_span*)henka_calloc(
         HENKA_HKS_MAX_TOKENS,
         sizeof(*presentation_tokens));
-    if (behavior->language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT)
+    if (model_language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT)
     {
         hks_tokens = (henka_hks_token*)henka_calloc(
             HENKA_HKS_MAX_TOKENS,
             sizeof(*hks_tokens));
     }
-    else if (behavior->language == HENKA_SCRIPT_LANGUAGE_LUA)
+    else if (model_language == HENKA_SCRIPT_LANGUAGE_LUA)
     {
         lua_tokens = (henka_lua_token*)henka_calloc(
             HENKA_LUA_MAX_TOKENS,
             sizeof(*lua_tokens));
     }
     tokenized = sandbox3d_script_editor_tokenize(
-        behavior->language,
+        model_language,
         source,
         source_size,
         hks_tokens,
@@ -711,17 +748,12 @@ henka_result sandbox3d_script_editor_draw_preview(
         &token_count,
         &diagnostic,
         &lua_diagnostic);
+    code_bounds = sandbox3d_script_editor_get_code_bounds(bounds);
     mouse_position = henka_ui_get_mouse_position(ui);
     result = henka_ui_custom_interaction(
         ui,
         "script-editor-source",
-        henka_ui_rect_contains(
-            (henka_ui_rect){
-                bounds.x,
-                bounds.y + SANDBOX3D_SCRIPT_EDITOR_HEADER_HEIGHT,
-                bounds.width,
-                bounds.height - SANDBOX3D_SCRIPT_EDITOR_HEADER_HEIGHT},
-            mouse_position),
+        henka_ui_rect_contains(code_bounds, mouse_position),
         true,
         &code_interaction);
     if (result != HENKA_SUCCESS)
@@ -733,8 +765,7 @@ henka_result sandbox3d_script_editor_draw_preview(
     }
     if (code_interaction.pressed)
     {
-        size_t clicked_line = (size_t)((mouse_position.y - bounds.y -
-            SANDBOX3D_SCRIPT_EDITOR_HEADER_HEIGHT) /
+        size_t clicked_line = (size_t)((mouse_position.y - code_bounds.y) /
             SANDBOX3D_SCRIPT_EDITOR_LINE_HEIGHT);
         size_t line_offset = 0U;
         size_t line_length = 0U;
@@ -789,7 +820,7 @@ henka_result sandbox3d_script_editor_draw_preview(
             size_t replacement_size = 0U;
             if (tokenized)
             {
-                if (behavior->language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT)
+                if (model_language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT)
                 {
                     replacement_size = sandbox3d_script_editor_indent_replacement(
                         hks_tokens,
@@ -875,8 +906,12 @@ henka_result sandbox3d_script_editor_draw_preview(
         "Reload");
     if (save_clicked && !play_active)
     {
-        result = sandbox3d_script_editor_model_save(
-            model, project_root, behavior->asset_path);
+        const char* model_asset_path =
+            sandbox3d_script_editor_model_get_asset_path(model);
+        result = model_asset_path != NULL && model_asset_path[0] != '\0'
+            ? sandbox3d_script_editor_model_save(
+                model, project_root, model_asset_path)
+            : HENKA_ERROR_INVALID_STATE;
         if (result != HENKA_SUCCESS)
         {
             (void)snprintf(status_text, sizeof(status_text), "Save failed");
@@ -900,10 +935,13 @@ henka_result sandbox3d_script_editor_draw_preview(
         }
         else
         {
-            reload_result = sandbox3d_script_editor_model_load_asset(
-                model,
-                project_root,
-                behavior->asset_path);
+            const char* model_asset_path =
+                sandbox3d_script_editor_model_get_asset_path(model);
+            reload_result = model_asset_path != NULL &&
+                    model_asset_path[0] != '\0'
+                ? sandbox3d_script_editor_model_load_asset(
+                    model, project_root, model_asset_path)
+                : HENKA_ERROR_INVALID_STATE;
             if (reload_result != HENKA_SUCCESS)
             {
                 memset(&reload_diagnostic, 0, sizeof(reload_diagnostic));
@@ -969,12 +1007,34 @@ henka_result sandbox3d_script_editor_draw_preview(
             source_diagnostic.column,
             source_diagnostic.message);
     }
+    if (source_switch_blocked)
+    {
+        (void)snprintf(
+            status_text,
+            sizeof(status_text),
+            "Modified - save/revert to switch");
+        (void)snprintf(
+            diagnostic_text,
+            sizeof(diagnostic_text),
+            "Save or revert this script before switching behaviors.");
+    }
+    else if (source_switch_failed)
+    {
+        (void)snprintf(
+            status_text,
+            sizeof(status_text),
+            "Source switch failed");
+        (void)snprintf(
+            diagnostic_text,
+            sizeof(diagnostic_text),
+            "Selected script unavailable; current source retained.");
+    }
     (void)henka_ui_label_colored(
         ui,
         bounds.x + 8.0f,
         bounds.y + 5.0f,
         SANDBOX3D_SCRIPT_EDITOR_TEXT_SCALE,
-        sandbox3d_script_editor_language_label(behavior->language),
+        sandbox3d_script_editor_language_label(model_language),
         HENKA_UI_COLOR_INFO);
     (void)henka_ui_label_colored(
         ui,
@@ -986,7 +1046,7 @@ henka_result sandbox3d_script_editor_draw_preview(
                 ? HENKA_UI_COLOR_SUCCESS
                 : HENKA_UI_COLOR_WARNING);
     tokenized = sandbox3d_script_editor_tokenize(
-        behavior->language,
+        model_language,
         source,
         source_size,
         hks_tokens,
