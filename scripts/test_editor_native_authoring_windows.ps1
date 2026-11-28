@@ -365,6 +365,20 @@ function Assert-HenkaManifest {
     }
 }
 
+function Get-HenkaPackageInfoValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $pattern = '(?im)^' + [Regex]::Escape($Name) + ':\s*(?<value>[^\r\n]*)\s*$'
+    $fieldMatches = [Regex]::Matches($Text, $pattern)
+    if ($fieldMatches.Count -ne 1) {
+        throw "Package provenance must contain exactly one '$Name' field."
+    }
+    return $fieldMatches[0].Groups['value'].Value.Trim()
+}
+
 try {
     if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
         throw "The Sandbox3D executable was not found: $executable"
@@ -395,20 +409,40 @@ try {
     catch {
         throw "The selected Sandbox build provenance is not valid JSON: $($_.Exception.Message)"
     }
+    if ($buildProvenance.schema_version -ne 3 -or
+        [string]::IsNullOrWhiteSpace([string]$buildProvenance.commit_sha) -or
+        [string]::IsNullOrWhiteSpace([string]$buildProvenance.source_identity) -or
+        [string]::IsNullOrWhiteSpace([string]$buildProvenance.configuration)) {
+        throw "The selected Sandbox build provenance is missing its required identity fields."
+    }
     $currentSourceIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot
     $buildRootPrefix = [System.IO.Path]::GetFullPath($buildRoot).TrimEnd('\') + '\'
     $executableFullPath = [System.IO.Path]::GetFullPath($executable)
-    if (-not $executableFullPath.StartsWith($buildRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "The selected Sandbox executable is outside its canonical build root."
+    $buildExecutableRelativePath = [string]$buildProvenance.executable_relative_path
+    if ([string]::IsNullOrWhiteSpace($buildExecutableRelativePath) -or
+        [System.IO.Path]::IsPathRooted($buildExecutableRelativePath)) {
+        throw "Canonical build provenance contains an invalid executable-relative path."
     }
-    $executableRelativePath = $executableFullPath.Substring($buildRootPrefix.Length).Replace('\', '/')
-    if ([string]::IsNullOrWhiteSpace([string]$buildProvenance.commit_sha) -or
-        [string]$buildProvenance.commit_sha -ne [string]$currentSourceIdentity.commit_sha -or
-        [string]$buildProvenance.executable_relative_path -ne $executableRelativePath -or
-        [string]$buildProvenance.executable_sha256 -ne $inputExecutableHash.ToLowerInvariant() -or
-        [string]::IsNullOrWhiteSpace([string]$buildProvenance.source_identity) -or
-        [string]::IsNullOrWhiteSpace([string]$buildProvenance.configuration)) {
-        throw "The selected Sandbox executable does not match current canonical build provenance."
+    $buildExecutableFullPath = [System.IO.Path]::GetFullPath((Join-Path $buildRoot $buildExecutableRelativePath))
+    if (-not $buildExecutableFullPath.StartsWith($buildRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Canonical build provenance points outside its build root."
+    }
+    if (-not (Test-Path -LiteralPath $buildExecutableFullPath -PathType Leaf)) {
+        throw "The executable recorded by canonical build provenance is missing."
+    }
+    $buildExecutableHash = (Get-FileHash -LiteralPath $buildExecutableFullPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $isBuildExecutable = [string]::Equals(
+        $executableFullPath,
+        $buildExecutableFullPath,
+        [System.StringComparison]::OrdinalIgnoreCase)
+    if ([string]$buildProvenance.commit_sha -ne [string]$currentSourceIdentity.commit_sha -or
+        [string]$buildProvenance.source_state -ne [string]$currentSourceIdentity.source_state -or
+        [string]$buildProvenance.source_identity -ne [string]$currentSourceIdentity.source_identity -or
+        [string]$buildProvenance.executable_sha256 -ne $buildExecutableHash) {
+        throw "Canonical build provenance does not match the current source and recorded executable."
+    }
+    if ($isBuildExecutable -and $buildExecutableHash -ne $inputExecutableHash.ToLowerInvariant()) {
+        throw "The selected build executable does not match canonical build provenance."
     }
 
     $packageInfoPath = Join-Path (Split-Path -Parent $executable) "PACKAGE_INFO.txt"
@@ -416,6 +450,36 @@ try {
         Get-Content -LiteralPath $packageInfoPath -Raw
     } else {
         $null
+    }
+    if (-not $isBuildExecutable) {
+        $packagesRoot = [System.IO.Path]::GetFullPath((Join-Path (Get-HenkaLocalRoot -RepositoryRoot $repoRoot) 'packages')).TrimEnd('\') + '\'
+        $packageRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $executable))
+        if (-not [string]::Equals((Split-Path -Leaf $executable), 'HenkaSandbox3D.exe', [System.StringComparison]::OrdinalIgnoreCase) -or
+            -not $packageRoot.StartsWith($packagesRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "A packaged authoring executable must come from the canonical _local packages root."
+        }
+        if ($null -eq $packageInfoText -or
+            -not (Test-Path -LiteralPath (Join-Path $packageRoot 'assets') -PathType Container)) {
+            throw "The selected packaged executable is missing its package provenance or runtime assets."
+        }
+        $expectedPackageFields = [ordered]@{
+            'Package schema' = '5'
+            'Source commit' = [string]$currentSourceIdentity.commit_sha
+            'Source state' = [string]$currentSourceIdentity.source_state
+            'Source identity' = [string]$currentSourceIdentity.source_identity
+            'Build configuration' = [string]$buildProvenance.configuration
+            'Source executable' = ([string]$buildProvenance.executable_relative_path).Replace('\', '/')
+            'Source executable SHA-256' = $buildExecutableHash
+            'Packaged executable SHA-256' = $inputExecutableHash.ToLowerInvariant()
+            'Executable' = 'HenkaSandbox3D.exe'
+            'Runtime mode' = 'Packaged'
+        }
+        foreach ($field in $expectedPackageFields.Keys) {
+            $actual = Get-HenkaPackageInfoValue -Text $packageInfoText -Name $field
+            if (-not [string]::Equals($actual, [string]$expectedPackageFields[$field], [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "Packaged executable provenance mismatch for '$field'."
+            }
+        }
     }
     $checkerPaths = @(
         $PSCommandPath,
