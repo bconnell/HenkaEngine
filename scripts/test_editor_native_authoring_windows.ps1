@@ -365,6 +365,20 @@ function Assert-HenkaManifest {
     }
 }
 
+function Get-HenkaPackageInfoValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $pattern = '(?im)^' + [Regex]::Escape($Name) + ':\s*(?<value>[^\r\n]*)\s*$'
+    $fieldMatches = [Regex]::Matches($Text, $pattern)
+    if ($fieldMatches.Count -ne 1) {
+        throw "Package provenance must contain exactly one '$Name' field."
+    }
+    return $fieldMatches[0].Groups['value'].Value.Trim()
+}
+
 try {
     if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
         throw "The Sandbox3D executable was not found: $executable"
@@ -384,18 +398,96 @@ try {
         throw "The packaged test runtime executable differs from its selected product input."
     }
 
+    $buildProvenancePath = Join-Path $buildRoot "henka-build-info.json"
+    if (-not (Test-Path -LiteralPath $buildProvenancePath -PathType Leaf)) {
+        throw "The selected Sandbox executable has no canonical build provenance: $buildProvenancePath"
+    }
+    $buildProvenanceText = [System.IO.File]::ReadAllText($buildProvenancePath)
+    try {
+        $buildProvenance = $buildProvenanceText | ConvertFrom-Json
+    }
+    catch {
+        throw "The selected Sandbox build provenance is not valid JSON: $($_.Exception.Message)"
+    }
+    if ($buildProvenance.schema_version -ne 3 -or
+        [string]::IsNullOrWhiteSpace([string]$buildProvenance.commit_sha) -or
+        [string]::IsNullOrWhiteSpace([string]$buildProvenance.source_identity) -or
+        [string]::IsNullOrWhiteSpace([string]$buildProvenance.configuration)) {
+        throw "The selected Sandbox build provenance is missing its required identity fields."
+    }
+    $currentSourceIdentity = Get-HenkaSourceIdentity -RepoRoot $repoRoot
+    $buildRootPrefix = [System.IO.Path]::GetFullPath($buildRoot).TrimEnd('\') + '\'
+    $executableFullPath = [System.IO.Path]::GetFullPath($executable)
+    $buildExecutableRelativePath = [string]$buildProvenance.executable_relative_path
+    if ([string]::IsNullOrWhiteSpace($buildExecutableRelativePath) -or
+        [System.IO.Path]::IsPathRooted($buildExecutableRelativePath)) {
+        throw "Canonical build provenance contains an invalid executable-relative path."
+    }
+    $buildExecutableFullPath = [System.IO.Path]::GetFullPath((Join-Path $buildRoot $buildExecutableRelativePath))
+    if (-not $buildExecutableFullPath.StartsWith($buildRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Canonical build provenance points outside its build root."
+    }
+    if (-not (Test-Path -LiteralPath $buildExecutableFullPath -PathType Leaf)) {
+        throw "The executable recorded by canonical build provenance is missing."
+    }
+    $buildExecutableHash = (Get-FileHash -LiteralPath $buildExecutableFullPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $isBuildExecutable = [string]::Equals(
+        $executableFullPath,
+        $buildExecutableFullPath,
+        [System.StringComparison]::OrdinalIgnoreCase)
+    if ([string]$buildProvenance.commit_sha -ne [string]$currentSourceIdentity.commit_sha -or
+        [string]$buildProvenance.source_state -ne [string]$currentSourceIdentity.source_state -or
+        [string]$buildProvenance.source_identity -ne [string]$currentSourceIdentity.source_identity -or
+        [string]$buildProvenance.executable_sha256 -ne $buildExecutableHash) {
+        throw "Canonical build provenance does not match the current source and recorded executable."
+    }
+    if ($isBuildExecutable -and $buildExecutableHash -ne $inputExecutableHash.ToLowerInvariant()) {
+        throw "The selected build executable does not match canonical build provenance."
+    }
+
     $packageInfoPath = Join-Path (Split-Path -Parent $executable) "PACKAGE_INFO.txt"
     $packageInfoText = if (Test-Path -LiteralPath $packageInfoPath -PathType Leaf) {
         Get-Content -LiteralPath $packageInfoPath -Raw
     } else {
         $null
     }
+    if (-not $isBuildExecutable) {
+        $packagesRoot = [System.IO.Path]::GetFullPath((Join-Path (Get-HenkaLocalRoot -RepositoryRoot $repoRoot) 'packages')).TrimEnd('\') + '\'
+        $packageRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $executable))
+        if (-not [string]::Equals((Split-Path -Leaf $executable), 'HenkaSandbox3D.exe', [System.StringComparison]::OrdinalIgnoreCase) -or
+            -not $packageRoot.StartsWith($packagesRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "A packaged authoring executable must come from the canonical _local packages root."
+        }
+        if ($null -eq $packageInfoText -or
+            -not (Test-Path -LiteralPath (Join-Path $packageRoot 'assets') -PathType Container)) {
+            throw "The selected packaged executable is missing its package provenance or runtime assets."
+        }
+        $expectedPackageFields = [ordered]@{
+            'Package schema' = '5'
+            'Source commit' = [string]$currentSourceIdentity.commit_sha
+            'Source state' = [string]$currentSourceIdentity.source_state
+            'Source identity' = [string]$currentSourceIdentity.source_identity
+            'Build configuration' = [string]$buildProvenance.configuration
+            'Source executable' = ([string]$buildProvenance.executable_relative_path).Replace('\', '/')
+            'Source executable SHA-256' = $buildExecutableHash
+            'Packaged executable SHA-256' = $inputExecutableHash.ToLowerInvariant()
+            'Executable' = 'HenkaSandbox3D.exe'
+            'Runtime mode' = 'Packaged'
+        }
+        foreach ($field in $expectedPackageFields.Keys) {
+            $actual = Get-HenkaPackageInfoValue -Text $packageInfoText -Name $field
+            if (-not [string]::Equals($actual, [string]$expectedPackageFields[$field], [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "Packaged executable provenance mismatch for '$field'."
+            }
+        }
+    }
     $checkerPaths = @(
         $PSCommandPath,
         (Join-Path $repoRoot "scripts\henka_script_common.ps1"),
         (Join-Path $repoRoot "scripts\henka_ui_automation_helpers.ps1"),
         (Join-Path $repoRoot "scripts\henka_packaged_startup_readiness.ps1"),
-        (Join-Path $repoRoot "scripts\henka_packaged_scene_open_workflow.ps1")
+        (Join-Path $repoRoot "scripts\henka_packaged_scene_open_workflow.ps1"),
+        (Join-Path $repoRoot "scripts\henka_packaged_script_editor_workflow.ps1")
     )
     $checkerFiles = @(
         foreach ($checkerPath in $checkerPaths) {
@@ -409,7 +501,7 @@ try {
         }
     )
     $validationProvenance = [ordered]@{
-        schema_version = 1
+        schema_version = 2
         run_id = $runId
         recorded_utc = (Get-Date).ToUniversalTime().ToString("o")
         product = [ordered]@{
@@ -417,9 +509,22 @@ try {
             input_executable_sha256 = $inputExecutableHash
             runtime_executable_path = $runtimeExecutable
             runtime_executable_sha256 = $runtimeExecutableHash
+            build_provenance_path = $buildProvenancePath
+            build_provenance_sha256 = (Get-FileHash -LiteralPath $buildProvenancePath -Algorithm SHA256).Hash
+            build_commit_sha = $buildProvenance.commit_sha
+            build_source_state = $buildProvenance.source_state
+            build_source_identity = $buildProvenance.source_identity
+            build_configuration = $buildProvenance.configuration
+            build_executable_relative_path = $buildProvenance.executable_relative_path
+            build_executable_sha256 = $buildProvenance.executable_sha256
             package_info_path = if ($null -ne $packageInfoText) { $packageInfoPath } else { $null }
             package_info_sha256 = if ($null -ne $packageInfoText) { (Get-FileHash -LiteralPath $packageInfoPath -Algorithm SHA256).Hash } else { $null }
             package_info_text = $packageInfoText
+        }
+        candidate = [ordered]@{
+            commit_sha = $currentSourceIdentity.commit_sha
+            source_state = $currentSourceIdentity.source_state
+            source_identity = $currentSourceIdentity.source_identity
         }
         checker = [ordered]@{
             entry_script = $PSCommandPath
@@ -770,13 +875,30 @@ try {
         -EventPath $automationInputPath `
         -X ($cancelX + ($cancelWidth * 0.5)) `
         -Y ($cancelY + ($cancelHeight * 0.5))
-    $cancelledPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision action=reload choice=cancel scene_retained=1 scene_dirty=1 terrain_dirty_regions=0 active_name=' +
-        [Regex]::Escape($transientSceneName) + ' active_path=' +
-        [Regex]::Escape($confirmationControls.Groups['active_path'].Value) + ' object_count=' +
-        [Regex]::Escape($confirmationControls.Groups['object_count'].Value) + ' selected_entity=' +
-        [Regex]::Escape($confirmationControls.Groups['selected_entity'].Value) + ' terrain_active=[01]\.'
-    if (-not (Wait-FileContainsAfterOffset -Path $stdoutPath -Pattern $cancelledPattern -StartingOffset $reloadCancelOffset -TimeoutMilliseconds 10000)) {
-        throw "Cancel did not preserve the unsaved Scene Name in the live document."
+    $cancelledDecisionPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision\b.*\.$'
+    if (-not (Wait-FileContainsAfterOffset -Path $stdoutPath -Pattern $cancelledDecisionPattern -StartingOffset $reloadCancelOffset -TimeoutMilliseconds 10000)) {
+        throw "Cancel did not report a scene-transition decision for the live document."
+    }
+    $cancelledDecisionMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $cancelledDecisionPattern
+    $cancelledDecision = if ($null -eq $cancelledDecisionMatch) {
+        $null
+    } else {
+        ConvertFrom-HenkaSceneTransitionDecisionLine -Line $cancelledDecisionMatch.Value
+    }
+    if ($null -eq $cancelledDecision -or
+        $cancelledDecision.Action -ne 'reload' -or
+        $cancelledDecision.Choice -ne 'cancel' -or
+        $cancelledDecision.SceneRetained -ne '1' -or
+        $cancelledDecision.SceneDirty -ne '1' -or
+        $cancelledDecision.ScriptDirty -ne '0' -or
+        $cancelledDecision.TransformDirty -ne '0' -or
+        $cancelledDecision.TerrainDirtyRegions -ne '0' -or
+        $cancelledDecision.ActiveName -ne $transientSceneName -or
+        $cancelledDecision.ActivePath -ne $confirmationControls.Groups['active_path'].Value -or
+        $cancelledDecision.ObjectCount -ne $confirmationControls.Groups['object_count'].Value -or
+        $cancelledDecision.SelectedEntity -ne $confirmationControls.Groups['selected_entity'].Value -or
+        $cancelledDecision.TerrainActive -ne '0') {
+        throw "Cancel did not preserve the unsaved Scene Name and the complete prior document state."
     }
     $reloadedBeforeConfirmPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=reloaded name='
     if (Wait-FileContainsAfterOffset -Path $stdoutPath -Pattern $reloadedBeforeConfirmPattern -StartingOffset $reloadCancelOffset -TimeoutMilliseconds 100) {
@@ -1085,7 +1207,7 @@ try {
     if (-not (Wait-FileContainsAfterOffset -Path $stdoutPath -Pattern $newScenePendingPattern -StartingOffset $terrainTransitionOffset -TimeoutMilliseconds 10000)) {
         throw "The real New Scene action failed to protect the terrain-only dirty edit; no scene-document edit was pending."
     }
-    $terrainOnlyPendingPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_prompt_pending action=new dirty=1 scene_dirty=0 scene_dirty_query_result=0 terrain_dirty_query_result=0 terrain_dirty_regions=(?<dirty_regions>[1-9]\d*) target_path='
+    $terrainOnlyPendingPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_prompt_pending action=new dirty=1 scene_dirty=0 script_dirty=0 transform_dirty=0 scene_dirty_query_result=0 terrain_dirty_query_result=0 terrain_dirty_regions=(?<dirty_regions>[1-9]\d*) target_path='
     if (-not (Wait-FileContainsAfterOffset -Path $stdoutPath -Pattern $terrainOnlyPendingPattern -StartingOffset $terrainTransitionOffset -TimeoutMilliseconds 10000)) {
         throw "New Scene did not report the authoritative terrain-only dirty state."
     }
@@ -1098,6 +1220,7 @@ try {
         throw "Terrain-only New Scene confirmation did not expose its real product controls."
     }
     if ($newSceneConfirmation.Groups['scene_dirty'].Value -ne '0' -or
+        $newSceneConfirmation.Groups['transform_dirty'].Value -ne '0' -or
         [int]$newSceneConfirmation.Groups['scene_dirty_query_result'].Value -ne 0 -or
         [int]$newSceneConfirmation.Groups['terrain_dirty_query_result'].Value -ne 0 -or
         [int]$newSceneConfirmation.Groups['terrain_dirty_regions'].Value -lt 1 -or
@@ -1134,17 +1257,30 @@ try {
         -EventPath $automationInputPath `
         -X ($cancelX + ($cancelWidth * 0.5)) `
         -Y ($cancelY + ($cancelHeight * 0.5))
-    $newSceneCancelledPattern = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision action=new choice=cancel scene_retained=1 scene_dirty=0 terrain_dirty_regions=(?<dirty_regions>\d+) active_name=' +
-        [Regex]::Escape($terrainOnlyActiveName) + ' active_path=' + [Regex]::Escape($terrainOnlyActivePath) + ' object_count=' +
-        [Regex]::Escape($terrainOnlyObjectCount) + ' selected_entity=' + [Regex]::Escape($terrainOnlySelection) + ' terrain_active=1\.'
+    $newSceneCancelledPattern = '^HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision\b.*\.$'
     if (-not (Wait-FileContainsAfterOffset -Path $stdoutPath -Pattern $newSceneCancelledPattern -StartingOffset $newSceneCancelOffset -TimeoutMilliseconds 10000)) {
-        throw "Cancelling New Scene did not retain the clean document and its dirty terrain state."
+        throw "Cancel did not report a New Scene transition decision for the live document."
     }
-    $cancelledTerrain = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $newSceneCancelledPattern
-    if ($null -eq $cancelledTerrain -or
-        [int]$cancelledTerrain.Groups['dirty_regions'].Value -ne
-            [int]$terrainOnlyPending.Groups['dirty_regions'].Value) {
-        throw "Cancelling New Scene changed the dirty terrain region count."
+    $newSceneCancelledMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern $newSceneCancelledPattern
+    $newSceneCancelled = if ($null -eq $newSceneCancelledMatch) {
+        $null
+    } else {
+        ConvertFrom-HenkaSceneTransitionDecisionLine -Line $newSceneCancelledMatch.Value
+    }
+    if ($null -eq $newSceneCancelled -or
+        $newSceneCancelled.Action -ne 'new' -or
+        $newSceneCancelled.Choice -ne 'cancel' -or
+        $newSceneCancelled.SceneRetained -ne '1' -or
+        $newSceneCancelled.SceneDirty -ne '0' -or
+        $newSceneCancelled.ScriptDirty -ne '0' -or
+        $newSceneCancelled.TransformDirty -ne '0' -or
+        [int]$newSceneCancelled.TerrainDirtyRegions -ne [int]$terrainOnlyPending.Groups['dirty_regions'].Value -or
+        $newSceneCancelled.ActiveName -ne $terrainOnlyActiveName -or
+        $newSceneCancelled.ActivePath -ne $terrainOnlyActivePath -or
+        $newSceneCancelled.ObjectCount -ne $terrainOnlyObjectCount -or
+        $newSceneCancelled.SelectedEntity -ne $terrainOnlySelection -or
+        $newSceneCancelled.TerrainActive -ne '1') {
+        throw "Cancelling New Scene did not preserve the prior document, selection, clean scene state, and dirty terrain."
     }
 
     # Reload must discard the dirty Terrain data itself, not only replace the

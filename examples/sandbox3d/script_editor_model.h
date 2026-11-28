@@ -15,7 +15,9 @@ void sandbox3d_script_editor_model_destroy(
     sandbox3d_script_editor_model* model);
 
 /* Loads both the working and last-saved bounded documents. The loaded text is
- * clean and the caret/selection are collapsed at the beginning. */
+ * clean and the caret/selection are collapsed at the beginning. A replacement
+ * is rejected with HENKA_ERROR_INVALID_STATE while different unsaved text is
+ * present; identical text is an idempotent no-op. */
 henka_result sandbox3d_script_editor_model_load_text(
     sandbox3d_script_editor_model* model,
     const char* source,

@@ -244,10 +244,11 @@ bool henka_input_automation_apply_event(
     {
         const unsigned char* character;
 
-        while (isspace((unsigned char)*cursor))
+        if (!isspace((unsigned char)*cursor))
         {
-            ++cursor;
+            return false;
         }
+        ++cursor;
         if (*cursor == '\0')
         {
             return false;

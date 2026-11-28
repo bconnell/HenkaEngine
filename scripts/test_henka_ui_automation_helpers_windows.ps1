@@ -8,7 +8,11 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'henka_script_common.ps1')
 . (Join-Path $PSScriptRoot 'henka_ui_automation_helpers.ps1')
 . (Join-Path $PSScriptRoot 'henka_packaged_startup_readiness.ps1')
-. (Join-Path $PSScriptRoot 'henka_packaged_scene_open_workflow.ps1')
+$sceneWorkflowLoadOutput = @(. (Join-Path $PSScriptRoot 'henka_packaged_scene_open_workflow.ps1'))
+if ($sceneWorkflowLoadOutput.Count -ne 0 -or
+    $null -eq (Get-Command -Name 'Invoke-HenkaPackagedScriptEditorUnsavedChangeWorkflow' -CommandType Function -ErrorAction SilentlyContinue)) {
+    throw 'Loading the packaged scene workflow must quietly load its Script Editor workflow dependency.'
+}
 
 Add-Type -AssemblyName System.Drawing
 $temporaryRoot = Get-HenkaTestTemporaryRoot -RepositoryRoot $RepositoryRoot
@@ -143,13 +147,15 @@ try {
         throw 'The native authoring row parser fabricated geometry for a missing row.'
     }
 
-    $transitionLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision action=open choice=cancel scene_retained=1 scene_dirty=1 terrain_dirty_regions=0 active_name=Untitled Scene Unsaved Open Draft active_path=GoldenPathSaveAs.hscene object_count=0 selected_entity=0 terrain_active=0.'
+    $transitionLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision action=open choice=cancel scene_retained=1 scene_dirty=1 script_dirty=1 transform_dirty=1 terrain_dirty_regions=0 active_name=Untitled Scene Unsaved Open Draft active_path=GoldenPathSaveAs.hscene object_count=0 selected_entity=0 terrain_active=0.'
     $transitionDecision = ConvertFrom-HenkaSceneTransitionDecisionLine -Line $transitionLine
     if ($null -eq $transitionDecision -or
         $transitionDecision.Action -ne 'open' -or
         $transitionDecision.Choice -ne 'cancel' -or
         $transitionDecision.SceneRetained -ne '1' -or
         $transitionDecision.SceneDirty -ne '1' -or
+        $transitionDecision.ScriptDirty -ne '1' -or
+        $transitionDecision.TransformDirty -ne '1' -or
         $transitionDecision.TerrainDirtyRegions -ne '0' -or
         $transitionDecision.ActiveName -ne 'Untitled Scene Unsaved Open Draft' -or
         $transitionDecision.ActivePath -ne 'GoldenPathSaveAs.hscene' -or
@@ -158,13 +164,14 @@ try {
         $transitionDecision.TerrainActive -ne '0') {
         throw 'The scene-transition decision parser did not preserve the actual packaged cancellation state.'
     }
-    $reorderedTransitionLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision terrain_dirty_regions=0 active_path=Projects/Scene One.hscene terrain_active=0 selected_entity=2097153 action=open object_count=2 active_name=Open Draft With Spaces scene_retained=1 scene_dirty=1 choice=cancel.'
+    $reorderedTransitionLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision terrain_dirty_regions=0 active_path=Projects/Scene One.hscene terrain_active=0 selected_entity=2097153 action=open object_count=2 active_name=Open Draft With Spaces scene_retained=1 scene_dirty=1 script_dirty=0 transform_dirty=0 choice=cancel.'
     $reorderedTransition = ConvertFrom-HenkaSceneTransitionDecisionLine -Line $reorderedTransitionLine
     if ($null -eq $reorderedTransition -or
         $reorderedTransition.Action -ne $transitionDecision.Action -or
         $reorderedTransition.Choice -ne $transitionDecision.Choice -or
         $reorderedTransition.SceneRetained -ne $transitionDecision.SceneRetained -or
         $reorderedTransition.SceneDirty -ne $transitionDecision.SceneDirty -or
+        $reorderedTransition.TransformDirty -ne '0' -or
         $reorderedTransition.TerrainDirtyRegions -ne $transitionDecision.TerrainDirtyRegions -or
         $reorderedTransition.ActiveName -ne 'Open Draft With Spaces' -or
         $reorderedTransition.ActivePath -ne 'Projects/Scene One.hscene' -or
@@ -173,7 +180,24 @@ try {
         $reorderedTransition.TerrainActive -ne '0') {
         throw 'Reordered transition telemetry did not parse to the same structured state.'
     }
-    $transitionWithUnknownField = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision action=open diagnostic_frame=812 scene_dirty=1 choice=cancel terrain_dirty_regions=0 active_name=Open Draft With Spaces active_path=Projects/Scene One.hscene object_count=2 selected_entity=2097153 terrain_active=0 scene_retained=1.'
+    $terrainOnlyCancelLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision action=new choice=cancel scene_retained=1 scene_dirty=0 script_dirty=0 transform_dirty=0 terrain_dirty_regions=1 active_name=Saved Terrain Draft active_path=Projects/Terrain.hscene object_count=2 selected_entity=2097153 terrain_active=1.'
+    $terrainOnlyCancel = ConvertFrom-HenkaSceneTransitionDecisionLine -Line $terrainOnlyCancelLine
+    if ($null -eq $terrainOnlyCancel -or
+        $terrainOnlyCancel.Action -ne 'new' -or
+        $terrainOnlyCancel.Choice -ne 'cancel' -or
+        $terrainOnlyCancel.SceneRetained -ne '1' -or
+        $terrainOnlyCancel.SceneDirty -ne '0' -or
+        $terrainOnlyCancel.ScriptDirty -ne '0' -or
+        $terrainOnlyCancel.TransformDirty -ne '0' -or
+        $terrainOnlyCancel.TerrainDirtyRegions -ne '1' -or
+        $terrainOnlyCancel.ActiveName -ne 'Saved Terrain Draft' -or
+        $terrainOnlyCancel.ActivePath -ne 'Projects/Terrain.hscene' -or
+        $terrainOnlyCancel.ObjectCount -ne '2' -or
+        $terrainOnlyCancel.SelectedEntity -ne '2097153' -or
+        $terrainOnlyCancel.TerrainActive -ne '1') {
+        throw 'Terrain-only New Scene cancellation did not preserve structured scene and terrain state.'
+    }
+    $transitionWithUnknownField = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_decision action=open diagnostic_frame=812 scene_dirty=1 script_dirty=0 transform_dirty=0 choice=cancel terrain_dirty_regions=0 active_name=Open Draft With Spaces active_path=Projects/Scene One.hscene object_count=2 selected_entity=2097153 terrain_active=0 scene_retained=1.'
     $transitionWithUnknownField = ConvertFrom-HenkaSceneTransitionDecisionLine -Line $transitionWithUnknownField
     if ($null -eq $transitionWithUnknownField -or
         $transitionWithUnknownField.ActiveName -ne 'Open Draft With Spaces' -or
@@ -181,11 +205,13 @@ try {
         $transitionWithUnknownField.SceneDirty -ne '1') {
         throw 'An added diagnostic field contaminated an existing structured scene-state value.'
     }
-    if ($null -ne (ConvertFrom-HenkaSceneTransitionDecisionLine -Line ($transitionLine -replace 'scene_dirty=1', 'scene_dirty=1 scene_dirty=0'))) {
+    if ($null -ne (ConvertFrom-HenkaSceneTransitionDecisionLine -Line ($transitionLine -replace 'scene_dirty=1', 'scene_dirty=1 scene_dirty=0')) -or
+        $null -ne (ConvertFrom-HenkaSceneTransitionDecisionLine -Line ($transitionLine -replace ' script_dirty=1', '')) -or
+        $null -ne (ConvertFrom-HenkaSceneTransitionDecisionLine -Line ($transitionLine -replace ' transform_dirty=1', ''))) {
         throw 'The scene-transition parser accepted ambiguous duplicate state fields.'
     }
 
-    $reorderedTransitionDialogLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_dialog cancel_height=40 action=reload available=1 active_name=Saved Scene active_path=Projects/Scene One.hscene selected_entity=0 object_count=1 content_height=720 content_width=1280 terrain_dirty_regions=2 terrain_dirty_query_result=0 scene_dirty_query_result=0 scene_dirty=0 save_x=10 save_y=20 save_width=90 save_height=40 discard_x=110 discard_y=20 discard_width=90 discard_height=40 cancel_x=210 cancel_y=20 cancel_width=90.'
+    $reorderedTransitionDialogLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_transition_dialog cancel_height=40 action=reload available=1 active_name=Saved Scene active_path=Projects/Scene One.hscene selected_entity=0 object_count=1 content_height=720 content_width=1280 terrain_dirty_regions=2 terrain_dirty_query_result=0 scene_dirty_query_result=0 scene_dirty=0 script_dirty=0 transform_dirty=0 save_x=10 save_y=20 save_width=90 save_height=40 discard_x=110 discard_y=20 discard_width=90 discard_height=40 cancel_x=210 cancel_y=20 cancel_width=90.'
     $reorderedTransitionDialog = ConvertFrom-HenkaSceneTransitionControlsLine `
         -Line $reorderedTransitionDialogLine `
         -EventName 'scene_transition_dialog' `
@@ -194,7 +220,9 @@ try {
         $reorderedTransitionDialog.action -ne 'reload' -or
         $reorderedTransitionDialog.active_name -ne 'Saved Scene' -or
         $reorderedTransitionDialog.active_path -ne 'Projects/Scene One.hscene' -or
-        $reorderedTransitionDialog.terrain_dirty_regions -ne '2') {
+        $reorderedTransitionDialog.terrain_dirty_regions -ne '2' -or
+        $reorderedTransitionDialog.script_dirty -ne '0' -or
+        $reorderedTransitionDialog.transform_dirty -ne '0') {
         throw 'Reordered scene-transition control telemetry did not preserve its structured state.'
     }
     $reorderedTransitionDialogMatch = ConvertTo-HenkaAutomationRegexResult `
@@ -205,11 +233,39 @@ try {
         throw 'The structured control parser did not preserve the existing geometry-consumer interface.'
     }
     $packagedAuthoringWorkflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'test_editor_native_authoring_windows.ps1') -Raw
+    if (-not $packagedAuthoringWorkflow.Contains('ConvertFrom-HenkaSceneTransitionDecisionLine -Line $cancelledDecisionMatch.Value') -or
+        -not $packagedAuthoringWorkflow.Contains('ConvertFrom-HenkaSceneTransitionDecisionLine -Line $newSceneCancelledMatch.Value') -or
+        $packagedAuthoringWorkflow.Contains('scene_transition_decision action=reload choice=cancel scene_retained=1 scene_dirty=1 terrain_dirty_regions=0') -or
+        $packagedAuthoringWorkflow.Contains('scene_transition_decision action=new choice=cancel scene_retained=1 scene_dirty=0 terrain_dirty_regions=')) {
+        throw 'The packaged New Scene and Reload cancellation checks must consume structured transition decisions without field-order assumptions.'
+    }
     if (-not $packagedAuthoringWorkflow.Contains('$newSceneConfirmation.Groups[''scene_dirty_query_result''].Value') -or
         -not $packagedAuthoringWorkflow.Contains('$newSceneConfirmation.Groups[''terrain_dirty_query_result''].Value') -or
         $packagedAuthoringWorkflow.Contains('$newSceneConfirmation.Groups[''dirty_result''].Value') -or
         $packagedAuthoringWorkflow.Contains('$newSceneConfirmation.Groups[''terrain_dirty_result''].Value')) {
         throw 'The packaged New Scene workflow does not consume the canonical scene-transition query-result fields.'
+    }
+    $packagedScriptEditorWorkflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'henka_packaged_script_editor_workflow.ps1') -Raw
+    if (-not $packagedScriptEditorWorkflow.Contains('-WheelDelta -1.0') -or
+        -not $packagedScriptEditorWorkflow.Contains('$offsetAfter -le ($offsetBefore + 0.01)') -or
+        $packagedScriptEditorWorkflow.Contains('-WheelDelta 1.0')) {
+        throw 'The packaged Script Editor workflow must scroll downward toward lower Object Details controls and require forward offset progress.'
+    }
+    if (-not $packagedScriptEditorWorkflow.Contains('object_details_disclosure id=overview') -or
+        -not $packagedScriptEditorWorkflow.Contains('Expand Object Details Overview') -or
+        -not $packagedScriptEditorWorkflow.Contains('overviewDisclosure.Groups[''expanded''].Value')) {
+        throw 'The packaged Script Editor workflow must expand Overview through its current product-owned disclosure geometry before searching for Add HenkaScript.'
+    }
+    if (-not $packagedScriptEditorWorkflow.Contains('$surfaceEntityPattern') -or
+        -not $packagedScriptEditorWorkflow.Contains('for ($revealAttempt = 0; $revealAttempt -lt 8; ++$revealAttempt)') -or
+        -not $packagedScriptEditorWorkflow.Contains('The newly attached Script Editor did not become visible after bounded, product-consumed Object Details scrolling.') -or
+        -not $packagedScriptEditorWorkflow.Contains('$revealScroll.Groups[''handled''].Value -ne ''1''') -or
+        -not $packagedScriptEditorWorkflow.Contains('$revealOffsetAfter -le ($revealOffsetBefore + 0.01)')) {
+        throw 'The packaged Script Editor workflow must reveal newly inserted editor content through bounded Object Details scrolling, require product consumption and forward scroll progress, and match the attached object.'
+    }
+    $sandboxMainSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\examples\sandbox3d\main.c') -Raw
+    if (-not $sandboxMainSource.Contains('HENKA_AUTOMATION_DIAGNOSTIC object_details_disclosure id=overview')) {
+        throw 'The product does not expose the Overview disclosure rectangle and expansion state needed by the packaged workflow.'
     }
     $packagedSceneOpenWorkflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'henka_packaged_scene_open_workflow.ps1') -Raw
     if (-not $packagedSceneOpenWorkflow.Contains("`$confirmation.Groups['scene_dirty_query_result'].Value") -or
@@ -220,6 +276,14 @@ try {
     }
     if ($null -ne (ConvertFrom-HenkaSceneTransitionControlsLine `
             -Line ($reorderedTransitionDialogLine -replace 'scene_dirty=0', 'scene_dirty=0 scene_dirty=1') `
+            -EventName 'scene_transition_dialog' `
+            -Action 'reload') -or
+        $null -ne (ConvertFrom-HenkaSceneTransitionControlsLine `
+            -Line ($reorderedTransitionDialogLine -replace ' script_dirty=0', '') `
+            -EventName 'scene_transition_dialog' `
+            -Action 'reload') -or
+        $null -ne (ConvertFrom-HenkaSceneTransitionControlsLine `
+            -Line ($reorderedTransitionDialogLine -replace ' transform_dirty=0', '') `
             -EventName 'scene_transition_dialog' `
             -Action 'reload') -or
         $null -ne (ConvertFrom-HenkaSceneTransitionControlsLine `
@@ -317,6 +381,11 @@ try {
         $catalogPathGeometry.Groups['open_x'].Value -ne '10' -or
         $catalogPathGeometry.Groups['path_width'].Value -ne '200') {
         throw 'Open Scene controls did not preserve geometry with the current catalog and spaced-path diagnostics.'
+    }
+    $catalogRelativePath = $catalogPathGeometry.Groups['relative_path']
+    if ($null -eq $catalogRelativePath -or
+        $catalogRelativePath.Value -ne 'Scenes/Folder With Spaces/First Scene.hscene') {
+        throw 'Open Scene control parsing dropped the selected relative path needed by the packaged workflow.'
     }
     $catalogTelemetryPath = Join-Path $testDirectory 'scene-open-catalog.log'
     Set-Content -LiteralPath $catalogTelemetryPath -Value $catalogPathControlsLine -Encoding UTF8
@@ -469,6 +538,44 @@ try {
         $null -ne (ConvertFrom-HenkaGameAuthoringPhysicsDisclosureLine `
             -Line ($physicsDisclosureLine -replace 'available=1', 'available=1 available=1'))) {
         throw 'The Physics disclosure parser accepted invalid state or rejected reordered authoritative fields.'
+    }
+
+    $physicsFreshnessLogPath = Join-Path $testDirectory 'physics-disclosure-freshness.log'
+    [System.IO.File]::WriteAllText(
+        $physicsFreshnessLogPath,
+        $physicsDisclosureLine + [Environment]::NewLine,
+        [System.Text.Encoding]::UTF8)
+    $physicsFreshnessOffset = Get-FileLengthSafe -Path $physicsFreshnessLogPath
+    $physicsFreshnessPattern = '(?m)^HENKA_AUTOMATION_DIAGNOSTIC game_authoring_physics_disclosure [^\r\n]*$'
+    if (Wait-FileContainsAfterOffset `
+            -Path $physicsFreshnessLogPath `
+            -Pattern $physicsFreshnessPattern `
+            -StartingOffset $physicsFreshnessOffset `
+            -TimeoutMilliseconds 40) {
+        throw 'The Physics geometry freshness gate accepted a disclosure line that predated the current interaction.'
+    }
+    $freshPhysicsDisclosureLine = 'HENKA_AUTOMATION_DIAGNOSTIC game_authoring_physics_disclosure available=1 entity_id=2097164 expanded=0 rect=846.0,302.0,392.0,28.0.'
+    [System.IO.File]::AppendAllText(
+        $physicsFreshnessLogPath,
+        $freshPhysicsDisclosureLine + [Environment]::NewLine,
+        [System.Text.Encoding]::UTF8)
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $physicsFreshnessLogPath `
+            -Pattern $physicsFreshnessPattern `
+            -StartingOffset $physicsFreshnessOffset `
+            -TimeoutMilliseconds 1000)) {
+        throw 'The Physics geometry freshness gate rejected a current disclosure line appended after the interaction boundary.'
+    }
+    $freshPhysicsMatch = Get-LastLogRegexMatch `
+        -Path $physicsFreshnessLogPath `
+        -Pattern $physicsFreshnessPattern
+    $freshPhysicsFields = if ($null -eq $freshPhysicsMatch) { $null } else {
+        ConvertFrom-HenkaGameAuthoringPhysicsDisclosureLine -Line $freshPhysicsMatch.Value
+    }
+    if ($null -eq $freshPhysicsFields -or
+        $freshPhysicsFields.entity_id -ne '2097164' -or
+        $freshPhysicsFields.rect -ne '846.0,302.0,392.0,28.0') {
+        throw 'The Physics geometry freshness gate did not select the new product row rectangle.'
     }
 
     $openAttemptLine = 'HENKA_AUTOMATION_DIAGNOSTIC scene_document_persistence action=scene_open_attempt result=1 relative_path_empty=0 active_name=Open Draft With Spaces active_relative_path=Projects/Scene One.hscene active_document_object_count=2 selection_present=1.'

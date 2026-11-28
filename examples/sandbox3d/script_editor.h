@@ -12,6 +12,9 @@
 struct henka_engine;
 typedef struct sandbox3d_game_authoring sandbox3d_game_authoring;
 
+/* Returns the production source-editing region inside the Script Editor card. */
+henka_ui_rect sandbox3d_script_editor_get_code_bounds(henka_ui_rect bounds);
+
 /* Draws a bounded source editor for one attached behavior. Both Lua and
  * HenkaScript syntax spans and insertion indentation come from backend-owned
  * token APIs; this surface does not implement a second grammar. */

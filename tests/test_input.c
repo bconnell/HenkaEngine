@@ -262,6 +262,14 @@ void henka_test_input(void)
         "text Rocket Alpha_1"));
     HENKA_TEST_ASSERT(strcmp(input.text_input, "Rocket Alpha_1") == 0);
     HENKA_TEST_ASSERT(input.text_input_size == strlen("Rocket Alpha_1"));
+    HENKA_TEST_ASSERT(henka_input_automation_apply_event(
+        &input,
+        "text  "));
+    HENKA_TEST_ASSERT(strcmp(input.text_input, "Rocket Alpha_1 ") == 0);
+    HENKA_TEST_ASSERT(henka_input_automation_apply_event(
+        &input,
+        "text  x"));
+    HENKA_TEST_ASSERT(strcmp(input.text_input, "Rocket Alpha_1  x") == 0);
     HENKA_TEST_ASSERT(!henka_input_automation_apply_event(&input, "text"));
     input.mouse_position = (henka_vec2){123.0f, 234.0f};
     input.mouse_delta = (henka_vec2){0.0f, 0.0f};

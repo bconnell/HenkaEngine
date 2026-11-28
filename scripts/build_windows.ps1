@@ -84,7 +84,6 @@ try {
         -FilePath "powershell.exe" `
         -Arguments @(
             "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
             "-File", $provenanceScript,
             "-RepoRoot", $repoRoot,
             "-BuildRoot", $buildRoot,

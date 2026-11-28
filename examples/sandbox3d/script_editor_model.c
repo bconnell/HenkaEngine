@@ -211,6 +211,23 @@ henka_result sandbox3d_script_editor_model_load_text(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (sandbox3d_script_editor_model_is_dirty(model))
+    {
+        const char* current_source = NULL;
+        size_t current_source_size = 0U;
+        result = sandbox3d_script_editor_model_get_source(
+            model, &current_source, &current_source_size);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        if (current_source_size == source_size &&
+            memcmp(current_source, source, source_size) == 0)
+        {
+            return HENKA_SUCCESS;
+        }
+        return HENKA_ERROR_INVALID_STATE;
+    }
     result = henka_script_source_set_text(
         model->saved_document, source, source_size);
     if (result != HENKA_SUCCESS)
@@ -250,6 +267,10 @@ henka_result sandbox3d_script_editor_model_load_asset(
         relative_path == NULL || relative_path[0] == '\0')
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (sandbox3d_script_editor_model_is_dirty(model))
+    {
+        return HENKA_ERROR_INVALID_STATE;
     }
     if (!sandbox3d_script_editor_model_copy_path(
             validated_path, sizeof(validated_path), relative_path))
