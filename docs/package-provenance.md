@@ -4,7 +4,7 @@ Henka's Windows package flow records and verifies the build that produced the ru
 
 ## Build record
 
-`_local/builds/<checkout-key>/henka-build-info.json` is written transactionally
+`_local/bld/<compact-build-key>/henka-build-info.json` is written transactionally
 after a successful Windows build. It records:
 
 - the full source commit

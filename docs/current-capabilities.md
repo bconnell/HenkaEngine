@@ -153,8 +153,8 @@ The Sandbox has a bounded Game Authoring V1 path for its registered scene object
 - Persistent Scene Document IDs map to generation-checked runtime entities through a dedicated adapter.
 - Runtime handles are not serialized.
 - The Scene Objects panel edits the persistent scene-level name through Game
-  Authoring history. HSCN v16 and earlier files use the legacy `Untitled
-  Scene` default; saves use v17 format.
+  Authoring history. HSCN v1-v16 files use the legacy `Untitled Scene` default;
+  saves use v17 format.
 - New Scene creates an empty, camera-ready Scene Document without a saved
   project-relative path. Save As creates its initial `.hscene` file; ordinary
   Save and Reload require an active saved path.
@@ -166,6 +166,11 @@ The Sandbox has a bounded Game Authoring V1 path for its registered scene object
 ### Save and reload
 
 Save, Save As, Reload, and Open Scene use the confined, checksummed `.hscene` format. Save As creates a new project-relative scene file without overwriting an existing scene and updates the `henka.project` startup-scene selection. The scene and manifest are committed transactionally; a manifest commit failure rolls back the scene write and leaves the active authoring path unchanged. Open Scene loads an explicitly chosen project-relative scene without changing the startup-scene selection. It validates an isolated candidate before replacing the active document; a cancelled or failed load retains the current scene and authoring state. The filesystem rollback path reports the recovery location if rollback itself cannot complete.
+
+The Open Scene form also lists project-relative `.hscene` files in a bounded,
+deterministically sorted catalog with refresh and page navigation. Selecting a
+catalog entry fills the path field. If the catalog cannot be read, a
+project-relative `.hscene` path can still be entered manually.
 
 Project Open uses the startup-scene path in `henka.project`; Open Scene loads
 an explicitly chosen document without changing that selection; Reload reloads

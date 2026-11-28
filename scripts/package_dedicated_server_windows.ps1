@@ -132,7 +132,7 @@ Source commit: $currentCommit
 Source state: $sourceState
 Source identity: $($sourceIdentity.source_identity)
 Build configuration: $Configuration
-Source executable: _local/builds/<checkout-key>/examples/dedicated_server/$Configuration/henka_dedicated_server.exe
+Source executable (relative to build root): examples/dedicated_server/$Configuration/henka_dedicated_server.exe
 Source executable SHA-256: $sourceHash
 Packaged executable SHA-256: $packagedHash
 Runtime dependencies: Henka runtime and ENet are statically linked; no client renderer, SDL, OpenGL, or KTX runtime is packaged.

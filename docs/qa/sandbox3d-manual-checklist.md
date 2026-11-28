@@ -175,8 +175,10 @@ project's startup-scene choice distinct from the currently open scene.
 3. Save the new scene under a new project-relative name. Confirm the scene
    name and object identity survive close/reopen.
 4. Save a second scene and select it as the project startup scene. Use **Open**
-   to open the first scene and confirm that Open Scene does not change the
-   project's startup selection.
+   to open the first scene. Confirm the sorted scene catalog can be refreshed
+   and paged, selecting an entry fills the path field, and Open Scene does not
+   change the project's startup selection. If the catalog is unavailable,
+   enter the project-relative `.hscene` path manually.
 5. Use **Reload** on a saved scene after editing it and confirm the saved
    content is restored.
 6. Make the Scene Document dirty and exercise **Save**, **Discard**, and

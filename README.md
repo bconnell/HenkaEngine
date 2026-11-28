@@ -298,17 +298,15 @@ contracts owned by the linked documentation above.
 
 ## Roadmap
 
-The current roadmap is 3D-first. Renderer completion leads the active sequence,
-followed by integrated modeling/content authoring, assets/materials, physics,
-Game Authoring/Scene Document/project workflow, prefabs, camera/viewport,
-terrain/world, lighting/environment, scripting, Character Controller, Audio,
-networking/server behavior, editor workspace, packaging/external projects,
-animation/character production, and a final overall 3D integration audit.
+The current focus is a practical 3D game-authoring workflow: multi-scene project
+management, the remaining unsaved-change cases, hierarchy and object
+organization, remaining component-authoring workflows, and editor usability.
+Other unfinished 3D capabilities remain tracked in the
+[completion matrix](docs/engine-completion-matrix.md).
 
-First-class 2D starts only after the current general 3D boundary closes.
-First-class 2.5D follows the completed 2D boundary. A final whole-engine audit
-then revalidates 3D, 2D, 2.5D, and their shared architecture before further
-major expansion. See the [roadmap](docs/roadmap.md) for the maintained direction.
+First-class 2D follows completion of the general 3D boundary, and first-class
+2.5D follows the mature 2D foundation. See the [roadmap](docs/roadmap.md) for
+the current direction and remaining work.
 
 ## Support Henka Engine
 

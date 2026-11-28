@@ -30,11 +30,11 @@ Security-sensitive areas include:
 4. External project templates.
 5. Runtime diagnostics.
 6. Public documentation that could cause unsafe usage.
-7. Any future network, scripting, plugin, or editor workflow if those are added later.
+7. Network transport, scripting, and editor workflows, alongside file parsing and package paths.
 
 ## Current security expectations
 
-Henka Engine currently has no accounts, telemetry, analytics, cloud sync, payment logic, or network-backed runtime behavior.
+Henka Engine currently has no hosted accounts or identity, telemetry, analytics, cloud sync, or payment logic. The runtime does include bounded ENet client/server networking and a dedicated-server host; endpoint configuration, packet handling, and networked runtime behavior are within the security review scope.
 
 Do not include private files, credentials, API keys, local user data, generated settings, packaged output, screenshots with private information, or machine-specific logs in issues, pull requests, commits, or test fixtures.
 

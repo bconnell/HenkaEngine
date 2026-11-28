@@ -52,7 +52,7 @@ will make relevant tools easier to find.
 
 Planned project and asset management features include:
 
-- recent projects, project creation and opening, templates, help, and engine-version information;
+- a project launcher with recent-project selection and project creation, templates, help, and engine-version information;
 - stable asset identity across supported path and name changes;
 - folders, search, filters, thumbnails, import, rename, move, duplicate, delete, drag-and-drop, dependency inspection, and missing-dependency diagnostics;
 - separate project settings and personal editor preferences.
